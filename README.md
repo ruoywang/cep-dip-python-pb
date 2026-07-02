@@ -25,7 +25,7 @@ LDIPOL along z).
 | `tools/` | `vasp_volumetric.py` (CHGCAR/PHI/RHOB/RHOION reader), `vasp_inputs.py`. |
 | `tests/` | Field/debug-output comparison and audit scripts. |
 | `results/` | Numerical summaries: accuracy checks (`checks/`), 1D profiles (`profiles/`), VASP-vs-Python timing (`comparison/`), final reproduction summaries. |
-| `docs/` | Findings (including the negative result below), change logs, reproduction summaries. |
+| `docs/` | Findings (including the negative result below), change logs, reproduction summaries, and `results_overview.html` — a self-contained results page (open in any browser). |
 | `example/case_cal18/` | INCAR / POSCAR / KPOINTS / OUTCAR of the reference case, plus `CHECKSUMS.sha256` and `POTCAR_INFO.txt` for the files that stay out of the repo. |
 
 ## Files intentionally not in this repository
