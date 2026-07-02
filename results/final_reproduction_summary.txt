@@ -1,0 +1,56 @@
+Reference:
+  /scratch/08384/tg876840/tmp/4-NiN/2-codex/2-NiN/3-200_structures/cal_18
+
+Best reproduction:
+  work/cal18_original_chgcar_skipposcorr_nsw20
+  The raw work directory was removed during cleanup. The patched source,
+  minimal input/reference case, and numerical summaries are retained.
+
+Inputs used by the best reproduction:
+  Original POSCAR/CONTCAR, INCAR-derived settings, KPOINTS, POTCAR, and final CHGCAR.
+  The reproduced CHGCAR is byte-for-byte identical to the reference CHGCAR.
+
+Core code changes:
+  code/CEP-DIP/src/fileio.F
+    Added an optional READCH flag to skip old-position/new-position charge correction for fixed-density CHGCAR reproduction.
+  code/CEP-DIP/src/main.F
+    Preserved and restored the fixed-density CHGCAR charge for final solvation and dipole-correction output.
+  code/CEP-DIP/src/force.F
+    Guarded fixed-density LDIPOL force access when DIP%FORCE is not associated.
+  code/CEP-DIP/src/solvation.F
+    Added debug output fields used to verify input density/source consistency.
+
+Final field comparison against the reference:
+  CHGCAR:
+    raw_rmse      0
+    integral_diff 0
+  PHI:
+    raw_rmse      1.69680267419e-07 eV
+    raw_mae       1.05491576479e-07 eV
+    raw_max_abs   4.5792000003e-07 eV
+    relative_rmse 2.65103996263e-08
+  RHOB:
+    raw_rmse      2.06883879454e-05
+    raw_mae       8.65149016455e-06
+    raw_max_abs   0.0018744087
+    relative_rmse 1.40868825136e-06
+  RHOION:
+    raw_rmse      2.74730062985e-07
+    raw_mae       1.02224876206e-07
+    raw_max_abs   2.36850000013e-06
+    relative_rmse 1.11917736968e-07
+
+Important excluded tests:
+  CEP-ion branch:
+    Much worse than CEP-DIP; excluded.
+  Old dipol.F branch:
+    Bitwise identical to current best for PHI/RHOB/RHOION and debug source fields; excluded.
+  NSW=1 fixed-density path:
+    Not converged for the solvent field; PHI raw RMSE 0.161 eV and RHOB raw RMSE 0.414; excluded.
+  Full SCF rerun:
+    Does not reproduce the final CHGCAR without the original internal SCF state/WAVECAR; excluded.
+
+Current interpretation:
+  The remaining PHI difference is a non-constant shape residual of order 1e-7 eV.
+  RHOB is a derivative/cavity-gradient quantity, so that tiny PHI residual is amplified at the solvent interface.
+  Since the fixed-density input CHGCAR is byte-identical to the reference output CHGCAR, the remaining mismatch is consistent with the original PHI/RHOB being generated from the internal double-precision SCF density before text CHGCAR truncation.

@@ -1,0 +1,7 @@
+step	vasp_call	vasp_no_write_s	vasp_write_s	vasp_with_write_s	python_stage	python_s	comment
+1	1	60.583000	0.000000	60.583000	fixstep_0	238.018492	VASP有6次SOL_VCORRECTION：前4次NOWRITE，第5/6包含最终WRITE结构；Python stage_times是脚本自己的5个fixstep。
+2	2	14.476000	0.000000	14.476000	fixstep_1	50.703459	VASP有6次SOL_VCORRECTION：前4次NOWRITE，第5/6包含最终WRITE结构；Python stage_times是脚本自己的5个fixstep。
+3	3	7.573100	0.000000	7.573100	fixstep_2	21.743475	VASP有6次SOL_VCORRECTION：前4次NOWRITE，第5/6包含最终WRITE结构；Python stage_times是脚本自己的5个fixstep。
+4	4	7.599400	0.000000	7.599400	fixstep_3	21.708878	VASP有6次SOL_VCORRECTION：前4次NOWRITE，第5/6包含最终WRITE结构；Python stage_times是脚本自己的5个fixstep。
+5	5	6.054100	0.000000	6.054100	fixstep_4	24.424631	VASP有6次SOL_VCORRECTION：前4次NOWRITE，第5/6包含最终WRITE结构；Python stage_times是脚本自己的5个fixstep。
+6	6	5.186900	21.549100	26.736000	no Python equivalent	0.000000	VASP有6次SOL_VCORRECTION：前4次NOWRITE，第5/6包含最终WRITE结构；Python stage_times是脚本自己的5个fixstep。

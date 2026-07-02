@@ -1,0 +1,10 @@
+--- patch_records/20260629_patch006_fixed_chgcar_ldipol/electron.F.before	2026-06-29 03:04:07.000000000 -0500
++++ src/electron.F	2026-06-29 03:04:27.000000000 -0500
+@@ -1062,6 +1062,7 @@
+ !=======================================================================
+       CALL checkAbort(LABORT_WITHOUT_CONV, IO, W%WDES%COMM, INFO)
+       IF (INFO%LABORT.OR.INFO%LSOFT) EXIT electron
++      IF (INFO%LCHCON .AND. DIP%LCOR_DIP .AND. N < NELM) INFO%LPOTOK=.FALSE.
+       TOTENL=TOTEN
+ 
+       ENDDO electron

@@ -1,0 +1,30 @@
+--- patch_records/20260629_patch006_fixed_chgcar_ldipol/pot.F.before	2026-06-29 03:04:07.000000000 -0500
++++ src/pot.F	2026-06-29 03:04:19.000000000 -0500
+@@ -85,6 +85,7 @@
+       REAL(q) ELECTROSTATIC
+       LOGICAL, EXTERNAL :: L_NO_LSDA_GLOBAL
+       COMPLEX(q), ALLOCATABLE::  CV_OLD(:), CVDIP(:)
++      LOGICAL :: LDO_DIPOL_CORRECTION
+       INTEGER :: ICALL
+       SAVE ICALL
+       DATA ICALL /0/
+@@ -319,8 +320,9 @@
+ ! add external electrostatic potential
+       DIP%ECORR=0
+       DIP%E_ION_EXTERN=0
++      LDO_DIPOL_CORRECTION = DIP%LCOR_DIP .AND. (ICALL > 1 .OR. INFO%ICHARG >= 10)
+ 
+-      IF (DIP%LCOR_DIP .AND. ICALL > 1) THEN
++      IF (LDO_DIPOL_CORRECTION) THEN
+ !      IF (DIP%LCOR_DIP) THEN
+           ! get the total charge and store it in CWORK
+           IF  ( WDES%NCDIJ > 1) THEN
+@@ -412,7 +414,7 @@
+ ! add the dielectric corrections to CVTOT and the energy 
+ !-----------------------------------------------------------------------
+ !      WRITE(*,'(A,I6)') 'ICALL = ',  ICALL
+-      IF (DIP%LCOR_DIP .AND. ICALL > 1) THEN
++      IF (LDO_DIPOL_CORRECTION) THEN
+ !      IF (DIP%LCOR_DIP) THEN
+          CALL RL_ADD(CVDIP, RINPL, CVDIP, 0._q, CVDIP, GRIDC)
+          CALL FFT3D(CVDIP,GRIDC,-1)

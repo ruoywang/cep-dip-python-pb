@@ -1,0 +1,14 @@
+order	stage	vasp_label	vasp_short_note	vasp_time_s	python_label	python_short_note	python_time_s
+1	read input	RDINPUT	read CHGCAR/input	3.348500	read_inputs	read files	14.369489
+2	prepare solute potential	DENCOR+PHISOL	core charge + solute potential	0.128300	solute_potential_and_dencor	solute potential + core charge	5.220083
+3	build VASP potential	POTLOK	VASP standard potential	61.105700	--	not in Python script	0.000000
+4	build cavity	NCAVITY total	solvent/ion cavity	2.336200	create_cavity	solvent/ion cavity	3.672932
+5	PB step 1	SOL call 1	PB solve step 1	60.583000	fixstep_0	PB solve step 1	238.018492
+6	PB step 2	SOL call 2	PB solve step 2	14.476000	fixstep_1	PB solve step 2	50.703459
+7	PB step 3	SOL call 3	PB solve step 3	7.573100	fixstep_2	PB solve step 3	21.743475
+8	PB step 4	SOL call 4	PB solve step 4	7.599400	fixstep_3	PB solve step 4	21.708878
+9	PB step 5	SOL call 5	PB solve step 5	6.054100	fixstep_4	PB solve step 5	24.424631
+10	final PB/write	SOL call 6	final PB solve	5.186900	--	not in Python script	0.000000
+11	write fields	WRITE	write PHI/RHOB/RHOION	21.549100	--	not separated	0.000000
+12	other VASP overhead	elapsed - listed	setup/finish/timer gaps	-9.203300	--	not applicable	0.000000
+TOTAL	total	OUTCAR elapsed	total wall time	180.737000	stage sum	total script time	379.861439

@@ -1,0 +1,82 @@
+reference: /scratch/08384/tg876840/tmp/4-NiN/2-codex/2-NiN/3-200_structures/cal_18
+rebuilt: fast_solonly15_chgcar_pb
+note: raw rebuilt directory was removed during cleanup; this file preserves the comparison.
+[CHGCAR]
+  reference_exists: True
+  rebuilt_exists: True
+  ref_grid: (168, 168, 384)
+  new_grid: (168, 168, 384)
+  ref_integral_or_mean: 6.6100000342524402e+02
+  new_integral_or_mean: 6.6100000342524402e+02
+  delta_integral_or_mean: 0.0000000000000000e+00
+  rmse_raw: 0.0000000000000000e+00
+  mae_raw: 0.0000000000000000e+00
+  max_abs_raw: 0.0000000000000000e+00
+  mean_delta_raw: 0.0000000000000000e+00
+  rmse_zmean: 0.0000000000000000e+00
+  mae_zmean: 0.0000000000000000e+00
+  max_abs_zmean: 0.0000000000000000e+00
+  status: compared
+[PHI]
+  reference_exists: True
+  rebuilt_exists: True
+  ref_grid: (168, 168, 384)
+  new_grid: (168, 168, 384)
+  ref_integral_or_mean: -1.3093627687269502e+00
+  new_integral_or_mean: -1.3093626946793806e+00
+  delta_integral_or_mean: 7.4047569631474630e-08
+  rmse_raw: 1.6949043497846517e-07
+  mae_raw: 1.0536058513956422e-07
+  max_abs_raw: 4.5750000010613689e-07
+  mean_delta_raw: 7.4047573385287099e-08
+  rmse_zmean: 1.6892893558068213e-07
+  mae_zmean: 1.0365697335234231e-07
+  max_abs_zmean: 4.5720316432795727e-07
+  status: compared
+[PHISOLV]
+  reference_exists: False
+  rebuilt_exists: False
+[RHOB]
+  reference_exists: True
+  rebuilt_exists: True
+  ref_grid: (168, 168, 384)
+  new_grid: (168, 168, 384)
+  ref_integral_or_mean: -7.0602559517381162e-14
+  new_integral_or_mean: 4.4564362184443542e-14
+  delta_integral_or_mean: 1.1516692170182470e-13
+  rmse_raw: 2.0644743265884682e-05
+  mae_raw: 8.6480329564050043e-06
+  max_abs_raw: 1.8611484999999650e-03
+  mean_delta_raw: 1.1408238471171117e-13
+  rmse_zmean: 1.0903280541104457e-05
+  mae_zmean: 4.5786001862993619e-06
+  max_abs_zmean: 6.4114075882137911e-05
+  status: compared
+[RHOION]
+  reference_exists: True
+  rebuilt_exists: True
+  ref_grid: (168, 168, 384)
+  new_grid: (168, 168, 384)
+  ref_integral_or_mean: -1.0000034252506915e+00
+  new_integral_or_mean: -1.0000034252441070e+00
+  delta_integral_or_mean: 6.5845107144468784e-12
+  rmse_raw: 2.7569670511368011e-07
+  mae_raw: 1.0258662526937479e-07
+  max_abs_raw: 2.3738000001216619e-06
+  mean_delta_raw: 6.5847232621276456e-12
+  rmse_zmean: 1.2236735228348089e-07
+  mae_zmean: 4.7667356837204785e-08
+  max_abs_zmean: 5.7244998852290507e-07
+  status: compared
+[SION]
+  reference_exists: False
+  rebuilt_exists: False
+[SDIEL]
+  reference_exists: False
+  rebuilt_exists: False
+[SSOLV]
+  reference_exists: False
+  rebuilt_exists: False
+[SCAV]
+  reference_exists: False
+  rebuilt_exists: False

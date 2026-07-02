@@ -1,0 +1,14 @@
+diagnostic: update_nlpb using reference PHI as total phi
+final solver is not allowed to use PHI; this isolates PB update/cavity errors
+RHOB_raw_rmse	4.475584101519e-01
+RHOION_raw_rmse	6.876164151379e-09
+RHOB_integral_ref	-7.060255951738e-14
+RHOB_integral_py	-9.128239357041e-16
+RHOION_integral_ref	-1.000003425251e+00
+RHOION_integral_py	-1.000003425111e+00
+time_create_cavity_s	5.598563
+time_fft_phi_s	0.317516
+time_ion_density_s	0.543800
+time_local_field_gradient_s	1.988056
+time_local_field_factor_s	39.268984
+time_bound_density_s	2.098760

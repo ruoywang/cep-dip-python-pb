@@ -1,0 +1,55 @@
+--- src/force.F.before_forceguard_20260628	2026-06-28 21:46:28.000000000 -0500
++++ src/force.F	2026-06-28 21:46:57.000000000 -0500
+@@ -1672,7 +1672,7 @@
+       IF (DYN%ISIF/=0) THEN
+          TSIF=SIKEF+EWSIF+EISIF+PSCSIF+XCSIF+DSIF+FNLSIF+AUGSIF+FOCKSIF
+       ENDIF
+-      IF ( DIP%IDIPCO >0 ) THEN
++      IF ( DIP%IDIPCO >0 .AND. ASSOCIATED(DIP%FORCE) ) THEN
+          EIFOR=EIFOR+DIP%FORCE
+       ENDIF
+ 
+--- src/dipol.F.before_forceguard_20260628	2026-06-28 21:46:28.000000000 -0500
++++ src/dipol.F	2026-06-28 21:46:57.000000000 -0500
+@@ -973,25 +973,35 @@
+       REAL(q) :: SIF(3,3),ZVAL(NTYP),VCA(NTYP)
+       REAL(q) :: ENERGY
+       INTEGER :: ITYP(NIONS),NITYP(NTYP)
+-      REAL(q) :: DIPOLC_TMP(3), d_mix, alpha, res, res_old, DIPOLC_IN(3)
+-      SAVE :: DIPOLC_TMP, res_old
++      INTEGER :: IDIR
++      REAL(q) :: d_mix, alpha, res, DIPOLC_IN(3)
++      REAL(q), SAVE :: DIPOLC_TMP(3) = 0._q, res_old = 0._q
+ 
+       alpha = 0.6_q
+-      DIPOLC_IN(3) = MAX(-20.0_q, MIN(20.0_q, DIPOLC(3)))
+-      res = DIPOLC_IN(3) - DIPOLC_TMP(3)
++      IDIR = 3
++      IF (IDIPCO >= 1 .AND. IDIPCO <= 3) IDIR = IDIPCO
++      DIPOLC_IN = 0._q
++      DIPOLC_IN(IDIR) = MAX(-20.0_q, MIN(20.0_q, DIPOLC(IDIR)))
++      res = DIPOLC_IN(IDIR) - DIPOLC_TMP(IDIR)
+ 
+       IF (ABS(res) > 1.0) alpha = alpha / ABS(res) / ABS(res) 
+       IF (res*res_old < 0.0_q .AND. ABS(res) > 0.7_q*ABS(res_old)) alpha =  0.5_q*alpha
+ !      IF (ABS(res) < 0.001) alpha = 0.0_q
+-      d_mix = (1.0_q - alpha)*DIPOLC_TMP(3) + alpha*DIPOLC_IN(3)
++      d_mix = (1.0_q - alpha)*DIPOLC_TMP(IDIR) + alpha*DIPOLC_IN(IDIR)
+       res_old = res
+-      DIPOLC_TMP(3) = d_mix
++      DIPOLC_TMP = 0._q
++      DIPOLC_TMP(IDIR) = d_mix
+ !      DIPOLC_TMP(3) = 0.001
+ 
+       WRITE(*,'(A,ES14.6)') 'alpha = ', alpha
+       WRITE(*,'(A,3F16.8)') 'DIPOLC = ', DIPOLC_TMP(1), DIPOLC_TMP(2), DIPOLC_TMP(3)
+ 
+       DIP= SQRT(SUM(DIPOLC_TMP*DIPOLC_TMP))
++      IF (DIP < 1E-12_q) THEN
++         EDIPOL = 0._q
++         EF = 0._q
++         RETURN
++      ENDIF
+ 
+    ! place two charges into direction in a distance DIS
+       POS(:,1)=0

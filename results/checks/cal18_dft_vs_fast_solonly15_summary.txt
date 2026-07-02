@@ -1,0 +1,40 @@
+case: cal_18
+DFT_reference_dir: /scratch/08384/tg876840/tmp/4-NiN/2-codex/2-NiN/3-200_structures/cal_18
+reproduction_dir: /scratch/08384/tg876840/tmp/b-1D_PB/fast_solonly15_chgcar_pb
+note: raw reproduction directory was removed during cleanup; this file preserves
+      the numerical summary and the 1D profile TSV is retained under results/profiles.
+
+timing:
+  original_DFT_cal18_elapsed_s: 509.454
+  reproduction_fast_solonly15_elapsed_s: 243.953
+  separate_full_SCF_rerun_old_cepdip_elapsed_s: 1369.192
+
+RMSE_vs_original_DFT:
+  RHOB:
+    raw_3d_rmse_vasp_grid_value: 2.0644743265884682e-05
+    raw_3d_mae_vasp_grid_value: 8.6480329564050043e-06
+    raw_3d_max_abs_vasp_grid_value: 1.8611484999999650e-03
+    density_3d_rmse_e_per_A3: 3.1086369981503088e-09
+    density_3d_mae_e_per_A3: 1.3022005099927923e-09
+    density_3d_max_abs_e_per_A3: 2.8024737395076832e-07
+    density_1d_profile_rmse_e_per_A3: 1.6417903993728047e-09
+    density_1d_profile_mae_e_per_A3: 6.8943487239124251e-10
+    density_1d_profile_max_abs_e_per_A3: 9.6541471028652615e-09
+    DFT_integrated_charge_e: -7.0602559517381162e-14
+    reproduction_integrated_charge_e: 4.4564362184443542e-14
+    integrated_charge_diff_e: 1.1516692170182470e-13
+  RHOION:
+    raw_3d_rmse_vasp_grid_value: 2.7569670511368011e-07
+    raw_3d_mae_vasp_grid_value: 1.0258662526937479e-07
+    raw_3d_max_abs_vasp_grid_value: 2.3738000001216619e-06
+    density_3d_rmse_e_per_A3: 4.1513762934523299e-11
+    density_3d_mae_e_per_A3: 1.5447253313853950e-11
+    density_3d_max_abs_e_per_A3: 3.5744123389217994e-10
+    density_1d_profile_rmse_e_per_A3: 1.8425788768628355e-11
+    density_1d_profile_mae_e_per_A3: 7.1776387400223804e-12
+    density_1d_profile_max_abs_e_per_A3: 8.6198176038349700e-11
+    DFT_integrated_charge_e: -1.0000034252506915e+00
+    reproduction_integrated_charge_e: -1.0000034252441070e+00
+    integrated_charge_diff_e: 6.5845107144468784e-12
+
+profile_tsv: results/profiles/cal18_dft_vs_fast_solonly15_rhob_rhoion_1d.tsv

@@ -1,0 +1,18 @@
+__pycache__/
+*.pyc
+*.so
+build/
+*.egg-info/
+
+# large volumetric fields never enter the repo
+CHGCAR
+PHI
+RHOB
+RHOION
+WAVECAR
+POTCAR
+
+# run outputs
+*.out
+*.err
+slurm-*.out

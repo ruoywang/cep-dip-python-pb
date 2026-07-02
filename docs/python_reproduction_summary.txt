@@ -1,0 +1,21 @@
+Pure Python PB reproduction status for data/case_cal18
+
+Input-side checks against patched VASP debug outputs:
+- CHGCAR valence -> DBG_NVAL 1D RMSE: 4.86e-13 raw charge units
+- POTCAR DENCOR -> DBG_DENCOR 1D RMSE: 8.88e-05 raw charge units; integral matches 4.5937668976 e
+- Python CVHAR (Hartree + local pseudopotential) -> DBG_CVHAR_IN 1D RMSE: 6.20e-05 eV
+- Python Ewald/CDIPOL reproduced VASP EF_z to ~1e-13 and CVDIP 1D RMSE: ~1.7e-12 eV
+
+Final from-scratch Newton/CDIPOL solve:
+- Result directory: pure_python/results/from_chgcar_newton_full
+- Final fixstep: 4
+- Final residual: 4.834408752430e-04
+- Final PHI 3D RMSE: 3.008140104861e-03 eV
+- Final PHI 1D RMSE: 3.470573577304e-04 eV
+- Final RHOB 1D RMSE: 3.038156071602e-06 e/A^3
+- Final RHOION 1D RMSE: 1.552535518095e-07 e/A^3
+
+Main scripts:
+- pure_python/solve_from_chgcar_newton.py: from CHGCAR/POTCAR/config to RHOB/RHOION/PHI using Python Newton PB + CDIPOL
+- pure_python/compare_debug_inputs_1d.py: compares Python input terms to patched VASP debug terms
+- pure_python/dipole_correction.py: Python CDIPOL/EWALD_DIPOL implementation

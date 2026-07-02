@@ -1,0 +1,5 @@
+valence_integral_e	6.610000034252e+02
+dencor_integral_e	4.593766897600e+00
+phi_hartree_mean_eV	-2.285767107630e-14
+phi_local_mean_eV	5.385301678015e-13
+phi_sol_no_dipole_mean_eV	1.067509228742e-15

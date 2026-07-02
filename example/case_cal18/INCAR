@@ -1,0 +1,48 @@
+# General VASP parameters
+ ISPIN  = 1
+ ENCUT  = 500
+ ISMEAR = 1
+ SIGMA  = 0.2
+ NCORE  = 8
+ NPAR   = 16
+ KPAR   = 5
+ ISTART  = 0
+ LCHARG  = T
+ LWAVE   = F
+ LREAL   = Auto
+ ALGO    = Fast
+ LORBIT  = 11
+ IVDW    = 12
+ LVDW_EWALD = .TRUE.
+ GGA = RP
+ LVHAR = .TRUE.
+
+ PREC = Normal
+ LAECHG = .TRUE.
+# MD
+   NSW = 0
+   EDIFF = 1E-6
+   EDIFFG = -0.02
+   IBRION = -1
+   ISIF = 2
+   NELM = 120
+   ISYM    = 0
+
+# VASPsol Solvent Model - This corresponds to water
+ LSOL = .TRUE.
+ ISOL = 2
+ C_MOLAR = 1.0        # set to the electrolyte concentration in mol/L
+ R_ION = 4.0          # set to the ionic radius in Angstrom
+ TAU = 9e-3
+
+ LDIPOL = .TRUE.
+ IDIPOL = 3
+ DIPOL = 0.5 0.5 0.5
+
+ LVAC      = .TRUE.
+ SOL_Z0    = 7.0
+ SOL_Z1    = 30.0
+
+ NELECT  = 661.0
+
+

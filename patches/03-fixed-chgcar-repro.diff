@@ -1,0 +1,1005 @@
+--- a/src/dipol.F
++++ b/src/dipol.F
+@@ -690,8 +690,10 @@
+       deltaQ = NELECT - ZION
+       !IF (LSOL .AND. LDO_SOL) 
+       deltaQ = deltaQ + Qsol
+-      WRITE(*,'(A,ES14.6)') 'deltaQ = ', deltaQ
+-      WRITE(*,'(A,3F16.8)') ' Dsol_rc = ', Dsol_rc(1), Dsol_rc(2), Dsol_rc(3)
++      IF (GRIDC%COMM%NODE_ME==GRIDC%COMM%IONODE) WRITE(*,'(A,ES24.15)') 'FIXSOL_CDIPOL_QSOL = ', Qsol
++      IF (GRIDC%COMM%NODE_ME==GRIDC%COMM%IONODE) WRITE(*,'(A,3ES24.15)') 'FIXSOL_CDIPOL_DSOL_ABS = ', Dsol_abs(1), Dsol_abs(2), Dsol_abs(3)
++      IF (GRIDC%COMM%NODE_ME==GRIDC%COMM%IONODE) WRITE(*,'(A,3ES24.15)') 'FIXSOL_CDIPOL_DSOL_RC = ', Dsol_rc(1), Dsol_rc(2), Dsol_rc(3)
++      IF (GRIDC%COMM%NODE_ME==GRIDC%COMM%IONODE) WRITE(*,'(A,ES24.15)') 'FIXSOL_CDIPOL_DELTAQ = ', deltaQ
+       IF (ABS(deltaQ)>1E-3) THEN
+          CALL EWALD_MONO(EMONO , deltaQ, LATT_CUR )
+          EQUAD     = -DIP%QUAD*deltaQ*TPI/(LATT_CUR%OMEGA)*FELECT/3
+@@ -708,8 +710,10 @@
+       DIP_FOR_FIELD = DIP%DIPOLC     
+       DIP_FOR_FIELD(3) = DIP_FOR_FIELD(3) + Dsol_rc(3)
+ !      DIP_FOR_FIELD = DIP%DIPOLC + Dsol_rc
+-      WRITE(*,'(A,3F16.8)') ' Dele = ', DIP%DIPOLC(1), DIP%DIPOLC(2), DIP%DIPOLC(3)
++      IF (GRIDC%COMM%NODE_ME==GRIDC%COMM%IONODE) WRITE(*,'(A,3ES24.15)') 'FIXSOL_CDIPOL_DELE = ', DIP%DIPOLC(1), DIP%DIPOLC(2), DIP%DIPOLC(3)
++      IF (GRIDC%COMM%NODE_ME==GRIDC%COMM%IONODE) WRITE(*,'(A,3ES24.15)') 'FIXSOL_CDIPOL_FIELD_DIPOLE = ', DIP_FOR_FIELD(1), DIP_FOR_FIELD(2), DIP_FOR_FIELD(3)
+       CALL EWALD_DIPOL(EDIPOL, EF, DIP_FOR_FIELD, LATT_CUR, IDIPCO)
++      IF (GRIDC%COMM%NODE_ME==GRIDC%COMM%IONODE) WRITE(*,'(A,3ES24.15)') 'FIXSOL_CDIPOL_EF = ', EF(1), EF(2), EF(3)
+ !      write(*,'(''field: '',6f9.4)') EDIPOL,EF
+  correct: IF (.NOT. DIP%LCOR_DIP) THEN
+       E_ION_EXTERN=0       ! no external field
+@@ -993,8 +997,8 @@
+       DIPOLC_TMP(IDIR) = d_mix
+ !      DIPOLC_TMP(3) = 0.001
+ 
+-      WRITE(*,'(A,ES14.6)') 'alpha = ', alpha
+-      WRITE(*,'(A,3F16.8)') 'DIPOLC = ', DIPOLC_TMP(1), DIPOLC_TMP(2), DIPOLC_TMP(3)
++!      WRITE(*,'(A,ES14.6)') 'alpha = ', alpha
++!      WRITE(*,'(A,3F16.8)') 'DIPOLC = ', DIPOLC_TMP(1), DIPOLC_TMP(2), DIPOLC_TMP(3)
+ 
+       DIP= SQRT(SUM(DIPOLC_TMP*DIPOLC_TMP))
+       IF (DIP < 1E-12_q) THEN
+@@ -1010,7 +1014,7 @@
+    ! set their charge to the required value
+       ZVAL(1)=-DIP/DIS
+       ZVAL(2)=+DIP/DIS
+-      WRITE(*,'(A,ES14.6)') 'ZVAL = ', ZVAL(1)
++!      WRITE(*,'(A,ES14.6)') 'ZVAL = ', ZVAL(1)
+       VCA    = 1
+    ! initialize varibales required by EWALD-summation
+       ITYP =(/ 1,2 /)  ! type of each ion
+--- a/src/fileio.F
++++ b/src/fileio.F
+@@ -1285,7 +1285,7 @@
+ !***********************************************************************
+ 
+       SUBROUTINE READCH(GRIDC, LOVERL, T_INFO, CHTOT, RHOLM, ICHARG, ISPIN, &
+-           LATT_CUR, P, CSTRF, IU, IU0)
++           LATT_CUR, P, CSTRF, IU, IU0, LSKIP_POSCORR)
+       USE prec
+       USE lattice
+       USE poscar
+@@ -1312,9 +1312,13 @@
+       INTEGER I, NIONSF, ISP, N
+       INTEGER NODE_ME, IONODE, IERR
+       LOGICAL LOVERL
++      LOGICAL, OPTIONAL :: LSKIP_POSCORR
++      LOGICAL :: LDO_POSCORR
+ 
+       NODE_ME=0
+       IONODE =0
++      LDO_POSCORR=.TRUE.
++      IF (PRESENT(LSKIP_POSCORR)) LDO_POSCORR=.NOT.LSKIP_POSCORR
+ #ifdef MPI
+       NODE_ME=GRIDC%COMM%NODE_ME
+       IONODE =GRIDC%COMM%IONODE
+@@ -1368,6 +1372,7 @@
+ ! now subtract charge density according to old position and add
+ ! that one according to new positions
+ !=======================================================================
++      IF (LDO_POSCORR) THEN
+       ALLOCATE(CD(GRIDC%MPLWV),CSTRF_OLD(GRIDC%MPLWV,T_INFO%NTYP))
+ 
+ !---- subtract atomic charge-denisty for old positions
+@@ -1384,6 +1389,9 @@
+       ENDDO
+ 
+       DEALLOCATE(CD,CSTRF_OLD,T_INFO_OLD%POSION)
++      ELSE
++      DEALLOCATE(T_INFO_OLD%POSION)
++      ENDIF
+ 
+       ! just in case initialize the magnetization density to 0
+       DO ISP=2,ISPIN
+--- a/src/main.F
++++ b/src/main.F
+@@ -297,6 +297,9 @@
+       INTEGER :: IRMAX,IRDMAX,ISPIND
+       INTEGER :: NPLWV,MPLWV,NPLWVC,MPLWVC,NTYPD,NIOND,NIONPD,NTYPPD
+       INTEGER :: NEDOS
++      INTEGER :: IFIXSOL, NFIXSOL, FIXSOL_STAT, FIXSOL_WRITE_STAT
++      CHARACTER(LEN=32) :: FIXSOL_ENV, FIXSOL_WRITE_ENV
++      LOGICAL :: LFIXSOL_WRITE_FIELDS
+       LOGICAL :: LNBANDS=.TRUE.
+       INTEGER :: TIU6, TIU0
+       !INTEGER :: MDALGO=0           ! dublicates MDALGO in tbdyn
+@@ -304,6 +307,7 @@
+ !  begin array dimensions ...
+ !=======================================================================
+       COMPLEX(q),ALLOCATABLE:: CHTOT(:,:)    ! charge-density in real / reciprocal space
++      COMPLEX(q),ALLOCATABLE:: CHTOT_READ(:,:) ! charge-density read from CHGCAR for fixed-density output
+       RGRID  ,ALLOCATABLE:: SV(:,:)          ! soft part of local potential
+       COMPLEX(q),ALLOCATABLE:: CHTOTL(:,:)   ! old charge-density
+       RGRID     ,ALLOCATABLE:: DENCOR(:)     ! partial core
+@@ -323,6 +327,7 @@
+       REAL(q)   ,ALLOCATABLE::  DDOS(:,:),DDOSI(:,:)
+ !-----local l-projected wavefunction characters
+       REAL(q)   ,ALLOCATABLE::   PAR(:,:,:,:,:),DOSPAR(:,:,:,:)
++      LOGICAL :: LHAVE_CHTOT_READ=.FALSE.
+ !  all-band-simultaneous-update arrays
+       GDEF   ,POINTER::   CHF(:,:,:,:),CHAM(:,:,:,:)
+ !  optics stuff
+@@ -563,6 +568,7 @@
+       OPEN(UNIT=IO%IU6,FILE=DIR_APP(1:DIR_LEN)//'OUTCAR',STATUS='UNKNOWN')
+ #endif
+       OPEN(UNIT=18,FILE=DIR_APP(1:DIR_LEN)//'CHGCAR',STATUS='UNKNOWN')
++      CALL START_TIMING("RDINP")
+ #ifdef logflow
+       OPEN(UNIT=19,FILE=DIR_APP(1:DIR_LEN)//'JOBFLOW',ACCESS='APPEND',STATUS='UNKNOWN')
+       WRITE(19,'(A)') 'SECTION = "----------------------------------------------------------------------------------------------------"'
+@@ -2538,6 +2544,7 @@
+ ! and we are ready to write all important information
+ ! to the xml file
+ !=======================================================================
++      CALL STOP_TIMING("RDINP",IO%IU6,'RDINPUT')
+       CALL XML_ATOMTYPES(T_INFO%NIONS, T_INFO%NTYP, T_INFO%NITYP, T_INFO%ITYP, P%ELEMENT, P%POMASS, P%ZVALF, P%SZNAMP )
+ 
+       CALL XML_TAG("structure","initialpos")
+@@ -2678,7 +2685,7 @@
+             IF (COMM_KINTER%NODE_ME.EQ.1 ) THEN
+ #endif
+               CALL READCH(GRIDC, INFO%LOVERL, T_INFO, CHTOT, RHOLM, INFO%INICHG, WDES%NCDIJ, &
+-                LATT_CUR, P, CSTRF(1,1), 18, IO%IU0)
++                LATT_CUR, P, CSTRF(1,1), 18, IO%IU0, INFO%ICHARG>10)
+ #ifdef MPI
+             END IF
+ #endif
+@@ -2688,6 +2695,13 @@
+                CALLMPI( M_bcast_d( COMM_KINTER, RHOLM, SIZE(RHOLM)) )
+             END IF
+ 
++            IF (INFO%ICHARG>10 .AND. INFO%INICHG==1) THEN
++               IF (.NOT. ALLOCATED(CHTOT_READ)) &
++                  ALLOCATE(CHTOT_READ(GRIDC%MPLWV,WDES%NCDIJ))
++               CHTOT_READ=CHTOT
++               LHAVE_CHTOT_READ=.TRUE.
++            ENDIF
++
+             IF (INFO%ICHARG>10 .AND. INFO%INICHG==0) THEN
+                CALL vtutor%error("ERROR: charge density could not be read from file CHGCAR for ICHARG>10")
+             ENDIF
+@@ -5039,24 +5053,75 @@
+ #endif
+       ENDIF
+ 
+-!-----if we are interested in the total (local) potential write it here:
+-      IF (IO%LVTOT.OR.IO%LVHAR) THEN
++!-----if we are interested in the total (local) potential write it here,
++!-----or if fixed-density CHGCAR output needs the VASPsol fields.
++      IF (IO%LVTOT.OR.IO%LVHAR.OR.(INFO%ICHARG>10 .AND. LHAVE_CHTOT_READ .AND. LSOL)) THEN
+ #ifdef MPI
+          IF (WDES%COMM_KINTER%NODE_ME.EQ.1) THEN
+ #endif
+ 
+-         CALL OUTPOT_TO_POT
++         IF (IO%LVTOT.OR.IO%LVHAR) THEN
++            CALL OUTPOT_TO_POT
+ 
+-         io_begin
+-         IF (IO%LOPEN) OPEN(IO%IUVTOT,FILE='LOCPOT',STATUS='UNKNOWN')
+-         REWIND IO%IUVTOT
+-         CALL OUTPOS(IO%IUVTOT,.FALSE.,INFO%SZNAM1,T_INFO,LATT_CUR%SCALE,LATT_CUR%A,.FALSE.,DYN%POSION)
+-         io_end
++            io_begin
++            IF (IO%LOPEN) OPEN(IO%IUVTOT,FILE='LOCPOT',STATUS='UNKNOWN')
++            REWIND IO%IUVTOT
++            CALL OUTPOS(IO%IUVTOT,.FALSE.,INFO%SZNAM1,T_INFO,LATT_CUR%SCALE,LATT_CUR%A,.FALSE.,DYN%POSION)
++            io_end
++         ENDIF
+ ! comment out the following line to add  exchange correlation
+          IF (IO%LVHAR) CALL SET_LEXCH(-1)
++         ! For fixed-density CHGCAR output, relax the solvent state here
++         ! instead of repeating the whole static outer loop with NSW>1.
++         NFIXSOL=1
++         LFIXSOL_WRITE_FIELDS=.TRUE.
++         IF (INFO%ICHARG>10 .AND. LHAVE_CHTOT_READ .AND. LSOL) THEN
++            NFIXSOL=15
++            CALL GET_ENVIRONMENT_VARIABLE('FIXSOL_STEPS', FIXSOL_ENV, STATUS=FIXSOL_STAT)
++            IF (FIXSOL_STAT == 0) THEN
++               READ(FIXSOL_ENV,*,ERR=5091) NFIXSOL
++5091           CONTINUE
++            ENDIF
++            CALL GET_ENVIRONMENT_VARIABLE('FIXSOL_WRITE_FIELDS', FIXSOL_WRITE_ENV, STATUS=FIXSOL_WRITE_STAT)
++            IF (FIXSOL_WRITE_STAT == 0) THEN
++               IF (FIXSOL_WRITE_ENV(1:1)=='0' .OR. FIXSOL_WRITE_ENV(1:1)=='F' .OR. &
++                   FIXSOL_WRITE_ENV(1:1)=='f' .OR. FIXSOL_WRITE_ENV(1:1)=='N' .OR. &
++                   FIXSOL_WRITE_ENV(1:1)=='n') LFIXSOL_WRITE_FIELDS=.FALSE.
++            ENDIF
++            IF (NFIXSOL < 1) NFIXSOL=1
++            IF (IO%IU0>=0) WRITE(IO%IU0,'(A,I6)') 'FIXSOL_NSTEPS = ', NFIXSOL
++            IF (IO%IU0>=0) WRITE(IO%IU0,'(A,L1)') 'FIXSOL_WRITE_FIELDS = ', LFIXSOL_WRITE_FIELDS
++            CALL SET_SOL_NOWRITE
++            DO IFIXSOL=1,NFIXSOL-1
++               IF (IO%IU0>=0) WRITE(IO%IU0,'(A,I6,A)') 'FIXSOL_STEP = ', IFIXSOL, ' NOWRITE'
++               CHTOT=CHTOT_READ
++               CALL POTLOK(GRID,GRIDC,GRID_SOFT, WDES%COMM_INTER, WDES, &
++                        INFO,P,T_INFO,E,LATT_CUR, &
++                        CHTOT,CSTRF,CVTOT,DENCOR,SV, SOFT_TO_C,XCSIF)
++
++               IF (.NOT. IO%LVHAR) THEN
++                  CALL POTLOK_METAGGA(KINEDEN, &
++                       GRID,GRIDC,GRID_SOFT,WDES%COMM_INTER,WDES,INFO,P,T_INFO,E,LATT_CUR, &
++                       CHDEN,CHTOT,DENCOR,CVTOT,SV,HAMILTONIAN%MUTOT,HAMILTONIAN%MU,SOFT_TO_C,XCSIF)
++               ENDIF
++            ENDDO
++         ENDIF
++
+          ! solvation - write out ionic and bound charges in vaspsol
+-         CALL SET_SOL_WRITE
++         IF (LFIXSOL_WRITE_FIELDS) THEN
++            CALL SET_SOL_WRITE
++         ELSE
++            CALL SET_SOL_NOWRITE
++         ENDIF
++         IF (INFO%ICHARG>10 .AND. LHAVE_CHTOT_READ .AND. LSOL) THEN
++            IF (LFIXSOL_WRITE_FIELDS) THEN
++               IF (IO%IU0>=0) WRITE(IO%IU0,'(A,I6,A)') 'FIXSOL_STEP = ', NFIXSOL, ' WRITE'
++            ELSE
++               IF (IO%IU0>=0) WRITE(IO%IU0,'(A,I6,A)') 'FIXSOL_STEP = ', NFIXSOL, ' NOWRITE'
++            ENDIF
++         ENDIF
+          ! solvation - 
++         IF (INFO%ICHARG>10 .AND. LHAVE_CHTOT_READ) CHTOT=CHTOT_READ
+          CALL POTLOK(GRID,GRIDC,GRID_SOFT, WDES%COMM_INTER, WDES, &
+                   INFO,P,T_INFO,E,LATT_CUR, &
+                   CHTOT,CSTRF,CVTOT,DENCOR,SV, SOFT_TO_C,XCSIF)
+@@ -5070,6 +5135,7 @@
+          ! call the dipol routine without changing the potential
+          IF ( DIP%IDIPCO >0 ) THEN
+            DIP%LCOR_DIP=.FALSE.
++           IF (INFO%ICHARG>10 .AND. LHAVE_CHTOT_READ) CHTOT=CHTOT_READ
+            CALL CDIPOL_CHTOT_REC(GRIDC, LATT_CUR,P,T_INFO, &
+                CHTOT,CSTRF,CVTOT, WDES%NCDIJ, INFO%NELECT, E%PSCENC )
+ 
+@@ -5077,15 +5143,17 @@
+          ENDIF
+ 
+ !        CALL OUTPOT(GRIDC, IO%IUVTOT,.TRUE.,HAMILTONIAN%MUTOT)
+-         CALL OUTPOT(GRIDC, IO%IUVTOT,.TRUE.,CVTOT)
+-         DO ISP=2,WDES%NCDIJ
+-            do_io WRITE(IO%IUVTOT,'(5E20.12)') (T_INFO%ATOMOM(NI),NI=1,T_INFO%NIONS)
+-            CALL OUTPOT(GRIDC, IO%IUVTOT,.TRUE.,CVTOT(1,ISP))
+-         ENDDO
+-         IF (IO%LOPEN) THEN
+-            do_io CALL REOPEN(IO%IUVTOT)
+-         ELSE
+-            do_io REWIND IO%IUVTOT
++         IF (IO%LVTOT.OR.IO%LVHAR) THEN
++            CALL OUTPOT(GRIDC, IO%IUVTOT,.TRUE.,CVTOT)
++            DO ISP=2,WDES%NCDIJ
++               do_io WRITE(IO%IUVTOT,'(5E20.12)') (T_INFO%ATOMOM(NI),NI=1,T_INFO%NIONS)
++               CALL OUTPOT(GRIDC, IO%IUVTOT,.TRUE.,CVTOT(1,ISP))
++            ENDDO
++            IF (IO%LOPEN) THEN
++               do_io CALL REOPEN(IO%IUVTOT)
++            ELSE
++               do_io REWIND IO%IUVTOT
++            ENDIF
+          ENDIF
+ #ifdef MPI
+          ENDIF
+--- a/src/solvation.F
++++ b/src/solvation.F
+@@ -1123,19 +1123,20 @@
+ 
+ MODULE solvation_lpcm
+  
+- USE prec
+- USE base
+- USE constant 
+- USE mpimy 
+- USE IFCORE
+- USE solvation_grid
+- USE solvation_moments
++	 USE prec
++	 USE base
++	 USE constant 
++	 USE ini, ONLY: STOP_TIMING
++	 USE mpimy 
++	 USE IFCORE
++	 USE solvation_grid
++	 USE solvation_moments
+  
+  IMPLICIT NONE
+  
+  PRIVATE
+ 
+- PUBLIC :: LPCM_solver, SET_SOL_WRITE_LPCM
++ PUBLIC :: LPCM_solver, SET_SOL_WRITE_LPCM, SET_SOL_NOWRITE_LPCM
+  PUBLIC :: LPCM_READER, LPCM_INIT, LPCM_WRITER, XML_WRITE_LPCM
+  
+  SAVE
+@@ -1232,7 +1233,7 @@
+  CALL SOL_pot(V_corr, n_b, n_ion)
+  CALL STOP_TIMING("SOL",IU6,"SOL_pot")
+  
+- IF (LWRITE) CALL WRITE_TO_FILE_RC('VSOLV', V_corr)
++ IF (.FALSE. .AND. LWRITE) CALL WRITE_TO_FILE_RC('VSOLV', V_corr)
+  
+  !add electrostatic potential correction (phi_solv) to V_corr
+  V_corr = V_corr + phi_solv
+@@ -1633,12 +1634,16 @@
+ !! write ionic and bound charges to files
+ !!
+ !!====================================================================
+-SUBROUTINE SET_SOL_WRITE_LPCM
+- LWRITE = .TRUE.
+-END SUBROUTINE SET_SOL_WRITE_LPCM
+-
+-
+-END MODULE solvation_lpcm
++SUBROUTINE SET_SOL_WRITE_LPCM
++ LWRITE = .TRUE.
++END SUBROUTINE SET_SOL_WRITE_LPCM
++
++SUBROUTINE SET_SOL_NOWRITE_LPCM
++ LWRITE = .FALSE.
++END SUBROUTINE SET_SOL_NOWRITE_LPCM
++
++
++END MODULE solvation_lpcm
+ 
+ 
+ 
+@@ -1650,24 +1655,25 @@
+ 
+ MODULE solvation_nlpcm
+  
+- USE prec
+- USE base
+- USE constant 
+- USE mpimy 
+- USE IFCORE
+- USE solvation_grid
+- USE solvation_moments
++		 USE prec
++		 USE base
++		 USE constant 
++		 USE ini, ONLY: STOP_TIMING
++		 USE mpimy 
++		 USE IFCORE
++	 USE solvation_grid
++	 USE solvation_moments
+  
+  IMPLICIT NONE
+  
+  PRIVATE
+ 
+- PUBLIC :: NLPCM_solver, SET_SOL_WRITE_NLPCM, qion_max
++ PUBLIC :: NLPCM_solver, SET_SOL_WRITE_NLPCM, SET_SOL_NOWRITE_NLPCM, qion_max
+  PUBLIC :: NLPCM_READER, NLPCM_INIT, NLPCM_WRITER, XML_WRITE_NLPCM
+  
+  SAVE
+  
+- INTEGER :: IU0
++	 INTEGER :: IU0, IU6
+  
+  REAL(q) :: A_sol, A_solv
+  
+@@ -1744,8 +1750,8 @@
+  REAL(q)    :: tol_L, rms, A_LPB, A_cav, phi_G0, f_ion, q_ion, dphi0
+  INTEGER    :: iter, NCGSOL, NCGSOL_L
+  
+- COMPLEX(q) :: CWORK(GRIDC%MPLWV)
+- REAL(q)    :: RWORKV(DIMREAL(GRIDC%MPLWV),3)
++ COMPLEX(q) :: CWORK(GRIDC%MPLWV)
++ REAL(q)    :: RWORKV(DIMREAL(GRIDC%MPLWV),3)
+  
+  ALLOCATABLE :: dphi, resid, ekappa2, chi
+  REAL(q) :: r0, fion, phi0
+@@ -1762,14 +1768,15 @@
+    ALLOCATE(ekappa2(0))
+  ENDIF
+  
+- ! create solvent cavity S and compute cavity formation potential and energy
+- dsol_io 'Creating dielectric and ionic cavities'
+- CALL CREATECAVITY(n_e, A_cav)
+- 
+- ! check whether the electrolyte region is large enough to accommodate the necessary counter charge
+- CALL FFT3D_RL2RC(S_ion, CWORK)
+- CALL GET_G0(CWORK, f_ion)
+- qion_max = f_ion * n_max*LATT_CUR%OMEGA
++	 ! create solvent cavity S and compute cavity formation potential and energy
++	 dsol_io 'Creating dielectric and ionic cavities'
++	 CALL CREATECAVITY(n_e, A_cav)
++	 CALL STOP_TIMING("SOL",IU6,"NCAVITY")
++	 
++	 ! check whether the electrolyte region is large enough to accommodate the necessary counter charge
++	 CALL FFT3D_RL2RC(S_ion, CWORK)
++	 CALL GET_G0(CWORK, f_ion)
++	 qion_max = f_ion * n_max*LATT_CUR%OMEGA
+  dsol_io ' qion_max:  ', qion_max
+  IF (abs(q_sol) > qion_max*0.99_q .AND. LNLION) THEN
+    IF (IU0>=0) THEN
+@@ -1788,27 +1795,30 @@
+  dsol_io ' Solving nonlinear dielectric/ionic screening model'
+  dsol_io ' Starting outer loop'
+  ifdsol IF(IU0>=0) WRITE(IU0,'(2X,6X,A4,2A24)') 'iter', 'A_solv', 'rms'
+- NCGSOL = 0
+- iter = 0
+- ! calculate E_loc, n_b, n_ion, lambda, for initial phi
+- CALL Update_NLPB(q_sol)
+- ! outer loop that solves the NLPB equations using Newton's method
+- DO
+-   ! compute residual
+-   ! resid = q_sol + n_b(phi) + n_ion(phi) - L0(phi_solv)
+-   CALL NLPB_resid(resid, q_sol, rms)
+-   ifdsol IF(IU0>=0) WRITE(IU0,'(2X,A6,I4,2E24.15)') 'NLPB: ', iter, A_solv, rms
+-   IF (rms < tol .AND. iter>=1) EXIT
+-   iter = iter + 1
++	 NCGSOL = 0
++	 iter = 0
++	 ! calculate E_loc, n_b, n_ion, lambda, for initial phi
++	 CALL Update_NLPB(q_sol)
++	 CALL STOP_TIMING("SOL",IU6,"NUPD0")
++	 ! outer loop that solves the NLPB equations using Newton's method
++	 DO
++	   ! compute residual
++	   ! resid = q_sol + n_b(phi) + n_ion(phi) - L0(phi_solv)
++	   CALL NLPB_resid(resid, q_sol, rms)
++	   CALL STOP_TIMING("SOL",IU6,"NRESID")
++	   ifdsol IF(IU0>=0) WRITE(IU0,'(2X,A6,I4,2E24.15)') 'NLPB: ', iter, A_solv, rms
++	   IF (rms < tol .AND. iter>=1) EXIT
++	   iter = iter + 1
+    IF (iter > 100) THEN
+       IF (IU0>=0) WRITE(IU0,*) 'ERROR: NLPCM_solver: outer loop failed to converge in 100 iterations'
+       STOP
+-   ENDIF
+-   ! compute linearized response functions chi and ekappa2
+-   CALL SET_LPB(chi, ekappa2)
+-   dphi = 0._q
+-   CALL GET_G0(n_ion, q_ion)
+-   ! adjust the G=0 component of phi if the counter charge is too close to saturation
++	   ENDIF
++	   ! compute linearized response functions chi and ekappa2
++	   CALL SET_LPB(chi, ekappa2)
++	   CALL STOP_TIMING("SOL",IU6,"NSETLPB")
++	   dphi = 0._q
++	   CALL GET_G0(n_ion, q_ion)
++	   ! adjust the G=0 component of phi if the counter charge is too close to saturation
+    IF (abs(q_ion) > qion_max*0.99_q .AND. LNLION) THEN
+       dphi0 = -D_PROD_RC(CWORK, phi)/f_ion
+       dsol_io ' Adjusting G=0 component of phi, q_ion = ', q_ion, ' qion_max = ', qion_max, ' dphi0 = ', dphi0
+@@ -1816,42 +1826,38 @@
+    ELSE
+       A_LPB = A_solv
+       !tol_L = MIN(rms/10._q,tol)
+-      tol_L = rms/10._q
+-      ! solve L(dphi) = resid
+-      CALL MINIMIZE_L(resid, chi, ekappa2, w_b, dphi, tol_L, A_LPB, NCGSOL_L)
+-      NCGSOL = NCGSOL + NCGSOL_L
+-   ENDIF
+-   ! update phi and E_loc and return free energy
+-   CALL UPDATE_PHI(dphi, resid, q_sol)
+- ENDDO
+- dsol_io ' Finished solving NLPB equations'
+- 
+- !Computes V_solv and adds to V_corr
+- CALL SOL_pot(V_corr)
++	      tol_L = rms/10._q
++	      ! solve L(dphi) = resid
++	      CALL MINIMIZE_L(resid, chi, ekappa2, w_b, dphi, tol_L, A_LPB, NCGSOL_L)
++	      CALL STOP_TIMING("SOL",IU6,"NMINL")
++	      NCGSOL = NCGSOL + NCGSOL_L
++	   ENDIF
++	   ! update phi and E_loc and return free energy
++	   CALL UPDATE_PHI(dphi, resid, q_sol)
++	   CALL STOP_TIMING("SOL",IU6,"NUPDPHI")
++	 ENDDO
++	 dsol_io ' Finished solving NLPB equations'
++	 
++	 !Computes V_solv and adds to V_corr
++	 CALL SOL_pot(V_corr)
++	 CALL STOP_TIMING("SOL",IU6,"NSOLPOT")
+  
+- IF (LWRITE) CALL WRITE_TO_FILE_RC('VSOLV', V_corr)
++ IF (.FALSE. .AND. LWRITE) CALL WRITE_TO_FILE_RC('VSOLV', V_corr)
+  
+  !add electrostatic potential correction (phi_solv) to V_corr
+  V_corr = V_corr + phi_solv
+  !compute solvation free energy (A_solv) and add A_cav
+  A_corr = A_solv + A_cav
+- !compute solvent charge density n_solv
+- n_solv = n_b + n_ion
+- 
+- CALL CALC_SOLVENT_MOMENTS(n_solv, Qsol_cache, Dsol_cache)
+- 
++ !compute solvent charge density n_solv
++ n_solv = n_b + n_ion
++ 
++ CALL CALC_SOLVENT_MOMENTS(n_solv, Qsol_cache, Dsol_cache)
++ 
+  IF (LWRITE) THEN
+    !CALL GET_G0(phi, phi_G0)
+    !CALL SET_G0(phi_sol, phi_G0)
+    CALL WRITE_TO_FILE_RC('PHI', phi)
+    !CALL WRITE_TO_FILE_RC('PHISOL', phi_sol)
+-   CALL WRITE_TO_FILE_RC('PHISOLV', phi_solv)
+-   CALL WRITE_TO_FILE_RL('ELOCX', E_loc(:,1))
+-   CALL WRITE_TO_FILE_RL('ELOCY', E_loc(:,2))
+-   CALL WRITE_TO_FILE_RL('ELOC', E_loc(:,3))
+-   CALL WRITE_TO_FILE_RL('PX', P(:,1))
+-   CALL WRITE_TO_FILE_RL('PY', P(:,2))
+-   CALL WRITE_TO_FILE_RL('P', P(:,3))
+    CALL WRITE_TO_FILE_RC('RHOB', n_b)
+    CALL WRITE_TO_FILE_RC('RHOION', n_ion)
+    !write Ez
+@@ -1864,14 +1870,15 @@
+    !CALL GRAD(CWORK, RWORKV)
+    !RWORKV = -RWORKV
+    !CALL WRITE_TO_FILE_RL('Dz', RWORKV(:,3))
+-   !write Dz-Ez
+-   !CALL L0_inv_op(n_b, CWORK)
+-   !CALL GRAD(CWORK, RWORKV)
+-   !RWORKV = -RWORKV
+-   !CALL WRITE_TO_FILE_RL('Dz-Ez', RWORKV(:,3))
+- ENDIF
+- 
+-END SUBROUTINE NLPCM_solver
++	   !write Dz-Ez
++	   !CALL L0_inv_op(n_b, CWORK)
++	   !CALL GRAD(CWORK, RWORKV)
++	   !RWORKV = -RWORKV
++	   !CALL WRITE_TO_FILE_RL('Dz-Ez', RWORKV(:,3))
++		 ENDIF
++	 IF (LWRITE) CALL STOP_TIMING("SOL",IU6,"WRITE")
++		 
++		END SUBROUTINE NLPCM_solver
+  
+ 
+ !>=====================SUBROUTINE UPDATE_PHI============================
+@@ -2049,7 +2056,7 @@
+  ! compute S_vdW in SWORK
+  CALL SHAPE_FUNC(Xcav(:,1), SWORK)
+  
+- IF (LWRITE) CALL WRITE_TO_FILE_RL('SVDW', SWORK)
++ IF (.FALSE. .AND. LWRITE) CALL WRITE_TO_FILE_RL('SVDW', SWORK)
+  
+  ! determine ionic cavity
+  ! S_vdW is stored in SWORK
+@@ -2068,7 +2075,7 @@
+ 
+  ! LVAC Ruoyu
+  IF (LVAC .AND. (SOL_Z1>SOL_Z0)) S_ion  = S_ion * M_ION
+- IF (LWRITE) CALL WRITE_TO_FILE_RL('SION', S_ion)
++ IF (.FALSE. .AND. LWRITE) CALL WRITE_TO_FILE_RL('SION', S_ion)
+  
+  ! determine solvent accessible cavity
+  ! S_vdW is stored in SWORK
+@@ -2086,7 +2093,7 @@
+  ENDIF
+  
+  IF (LVAC .AND. (SOL_Z1>SOL_Z0)) SWORK  = SWORK * M_ION
+- IF (LWRITE) CALL WRITE_TO_FILE_RL('SSOLV', SWORK)
++ IF (.FALSE. .AND. LWRITE) CALL WRITE_TO_FILE_RL('SSOLV', SWORK)
+  
+  ! determine solvent excluded cavity
+  ! S_solv is stored in SWORK
+@@ -2105,7 +2112,7 @@
+  ENDIF
+  
+  IF (LVAC .AND. (SOL_Z1>SOL_Z0)) S_cav  = S_cav * M_ION
+- IF (LWRITE) CALL WRITE_TO_FILE_RL('SCAV', S_cav)
++ IF (.FALSE. .AND. LWRITE) CALL WRITE_TO_FILE_RL('SCAV', S_cav)
+  
+  ! determine dielectric cavity
+  ! S_solv is stored in SWORK
+@@ -2125,7 +2132,7 @@
+  
+  ! LVAC Ruoyu
+  IF (LVAC .AND. (SOL_Z1>SOL_Z0)) S_diel = S_diel *  M_SOL
+- IF (LWRITE) CALL WRITE_TO_FILE_RL('SDIEL', S_diel)
++ IF (.FALSE. .AND. LWRITE) CALL WRITE_TO_FILE_RL('SDIEL', S_diel)
+  
+  
+  !-------------------------------------------------------------
+@@ -2299,13 +2306,14 @@
+  ALLOCATE(RWORK(DIMREAL(GRIDC%MPLWV)), RWORKV(DIMREAL(GRIDC%MPLWV),3), CWORK(GRIDC%MPLWV))
+  ALLOCATE(X(DIMREAL(GRIDC%MPLWV)))
+  ALLOCATE(n_work(DIMREAL(GRIDC%MPLWV)))
+- 
+- ! calculate local field
+- CALL SOLVE_E_LOC
+- 
+- !--------------------------
+- ! ionic contribution
+- !--------------------------
++	 
++	 ! calculate local field
++	 CALL SOLVE_E_LOC
++	 CALL STOP_TIMING("SOL",IU6,"UELOC")
++	 
++	 !--------------------------
++	 ! ionic contribution
++	 !--------------------------
+  
+  ! compute X = ZBETA*phi
+  CALL FFT3D_RC2RL(phi, RWORK)
+@@ -2341,12 +2349,13 @@
+  ! compute n_ion and fft to rec space
+  !n_work = -n_max*alpha0_ion/EDEPS/ZBETA * S_ion*n_work * LATT_CUR%OMEGA
+  n_work = -n_max*invBETA*ZBETA * S_ion*n_work * LATT_CUR%OMEGA
+- CALL FFT3D_RL2RC(n_work, n_ion)
+- lambda_ion = -invBETA*lambda_ion
+- 
+- 
+- !--------------------------
+- ! dielectric contribution
++	 CALL FFT3D_RL2RC(n_work, n_ion)
++	 lambda_ion = -invBETA*lambda_ion
++	 CALL STOP_TIMING("SOL",IU6,"UION")
++	 
++	 
++	 !--------------------------
++	 ! dielectric contribution
+  !--------------------------
+  
+  ! rotational part
+@@ -2387,33 +2396,36 @@
+  ! lambda_sic = 0.5*EDEPS*invalpha_sic*p**2
+  lambda_diel = lambda_diel + 0.5_q*EDEPS*invalpha_sic * (n_work*E_loc(:,4))**2
+  
+- ! compute |P|/|E_loc| in n_work
+- n_work = n_mol*S_diel*n_work
+- 
+- ! compute bound charge
+- ! n_b = -div(P)
+- DO I = 1,3
++	 ! compute |P|/|E_loc| in n_work
++	 n_work = n_mol*S_diel*n_work
++	 CALL STOP_TIMING("SOL",IU6,"UDIEL")
++	 
++	 ! compute bound charge
++	 ! n_b = -div(P)
++	 DO I = 1,3
+    P(:,I) = n_work*E_loc(:,I)
+    CALL CONV(P(:,I), w_b)
+- ENDDO
+- CALL DIV(E_loc,n_b,n_work)
+- n_b = -w_b*n_b * LATT_CUR%OMEGA
+- 
+- 
+- !--------------------------
+- ! solvation free energy
++	 ENDDO
++	 CALL DIV(E_loc,n_b,n_work)
++	 n_b = -w_b*n_b * LATT_CUR%OMEGA
++	 CALL STOP_TIMING("SOL",IU6,"UBOUND")
++	 
++	 
++	 !--------------------------
++	 ! solvation free energy
+  !--------------------------
+  ! compute q_sol * <phi_solv>
+  CALL GET_G0(phi_solv, A_solv)
+  A_solv = q_sol * A_solv
+  ! compute L0(phi) in CWORK
+  CALL L0_op(phi_solv,CWORK)
+- A_solv = A_solv - 0.5_q*D_PROD_RC(phi_solv, CWORK) &
+-      & + n_mol*SUM_GRID_RL(S_diel*lambda_diel) * LATT_CUR%OMEGA/GRIDC%NPLWV &
+-      & + n_max*SUM_GRID_RL(S_ion*lambda_ion) * LATT_CUR%OMEGA/GRIDC%NPLWV
+- 
+-
+-END SUBROUTINE Update_NLPB
++	 A_solv = A_solv - 0.5_q*D_PROD_RC(phi_solv, CWORK) &
++	      & + n_mol*SUM_GRID_RL(S_diel*lambda_diel) * LATT_CUR%OMEGA/GRIDC%NPLWV &
++	      & + n_max*SUM_GRID_RL(S_ion*lambda_ion) * LATT_CUR%OMEGA/GRIDC%NPLWV
++	 CALL STOP_TIMING("SOL",IU6,"UENERGY")
++	 
++	
++	END SUBROUTINE Update_NLPB
+ 
+ 
+ !>======================SUBROUTINE SET_LPB==========================
+@@ -2547,25 +2559,28 @@
+  tol = alpha0_rot*invalpha_sic*b*tol_grot
+  ! ensure that F(b) < 0 within machine precision
+  b = b*(1._q+2._q*tol)
+- 
+- ! compute -grad(x_corr(w,phi)) and store in E_loc
+- CALL GRAD(-conjg(w_b)*phi, E_loc)
+- 
+- ! solve for f_loc
+- IF (LNLDIEL) THEN
+-   ALLOCATE(x0(DIMREAL(GRIDC%MPLWV)))
+-   x0 = PBETA*E_loc(:,4)
+-   CALL fzero_vec(F_floc, a, b, tol, f_loc, x0)
+- ELSE
+-   f_loc = 1._q/(1._q - (alpha_pol+alpha0_rot)*invalpha_sic)
+- ENDIF
+- ! scale E_loc by f_loc
+- DO I = 1,4
+-   E_loc(:,I) = f_loc*E_loc(:,I)
+- END DO
+-
+- 
+-CONTAINS
++	 
++	 ! compute -grad(x_corr(w,phi)) and store in E_loc
++	 CALL GRAD(-conjg(w_b)*phi, E_loc)
++	 CALL STOP_TIMING("SOL",IU6,"EGRAD")
++	 
++	 ! solve for f_loc
++	 IF (LNLDIEL) THEN
++	   ALLOCATE(x0(DIMREAL(GRIDC%MPLWV)))
++	   x0 = PBETA*E_loc(:,4)
++	   CALL fzero_vec(F_floc, a, b, tol, f_loc, x0)
++	 ELSE
++	   f_loc = 1._q/(1._q - (alpha_pol+alpha0_rot)*invalpha_sic)
++	 ENDIF
++	 CALL STOP_TIMING("SOL",IU6,"EFZERO")
++	 ! scale E_loc by f_loc
++	 DO I = 1,4
++	   E_loc(:,I) = f_loc*E_loc(:,I)
++	 END DO
++	 CALL STOP_TIMING("SOL",IU6,"ESCALE")
++	
++	 
++	CONTAINS
+ 
+ 
+ ELEMENTAL REAL(q) FUNCTION F_floc(f_loc, x0)
+@@ -2862,8 +2877,9 @@
+  LOGICAL      :: LOPEN,LDUM
+  CHARACTER(1) :: CHARAC
+  
+- IU0 = IO%IU0
+- IU5 = IO%IU5
++	 IU0 = IO%IU0
++	 IU6 = IO%IU6
++	 IU5 = IO%IU5
+ 
+  LOPEN = .FALSE.
+ 
+@@ -3348,12 +3364,16 @@
+ !! write ionic and bound charges to files
+ !!
+ !!====================================================================
+-SUBROUTINE SET_SOL_WRITE_NLPCM
+- LWRITE = .TRUE.
+-END SUBROUTINE SET_SOL_WRITE_NLPCM
+-
+-
+-END MODULE solvation_nlpcm
++SUBROUTINE SET_SOL_WRITE_NLPCM
++ LWRITE = .TRUE.
++END SUBROUTINE SET_SOL_WRITE_NLPCM
++
++SUBROUTINE SET_SOL_NOWRITE_NLPCM
++ LWRITE = .FALSE.
++END SUBROUTINE SET_SOL_NOWRITE_NLPCM
++
++
++END MODULE solvation_nlpcm
+ 
+ 
+ 
+@@ -3396,7 +3416,7 @@
+  PRIVATE
+  
+  PUBLIC :: SOL_READER, SOL_INIT, SOL_WRITER, XML_WRITE_SOL, LDO_SOL
+- PUBLIC :: SOL_VCORRECTION, SET_RMS_SCF, SET_SOL_WRITE, update_NELECT, check_EFERMI, L_const_pot
++ PUBLIC :: SOL_VCORRECTION, SET_RMS_SCF, SET_SOL_WRITE, SET_SOL_NOWRITE, update_NELECT, check_EFERMI, L_const_pot
+  PUBLIC :: Ecorr_sol, V_corr, n_solv
+  
+  SAVE
+@@ -3448,7 +3468,7 @@
+  REAL(q)    :: RWORK(:)
+  REAL(q)    :: Ecorr_band, A_corr, tol, tmp
+  
+- REAL(q), PARAMETER :: tol_init = 1.e-3_q
++ REAL(q), PARAMETER :: tol_init = 1.e-3_q
+  
+  ALLOCATABLE :: n_val, n_e, phi_sol, CWORK, RWORK
+  COMPLEX(q), INTENT(IN), OPTIONAL :: CVDIP(:)
+@@ -3474,63 +3494,65 @@
+    ENDIF
+  ENDIF
+  
+- CALL SEPERATOR_TIMING(IU6)
+- CALL START_TIMING("SOL")
+- 
+- 
+- dsol_io 'Begin Solvation calculations'
+- 
+- ALLOCATE(n_val(GRIDC%MPLWV), n_e(GRIDC%MPLWV), phi_sol(GRIDC%MPLWV))
+- ALLOCATE(CWORK(GRIDC%MPLWV), RWORK(DIMREAL(GRIDC%MPLWV)))
+- ALLOCATE(CVDIP_RC(GRIDC%MPLWV)) 
+- 
+- ! copy charge to n_val
+- ! CHTOT(:,1) contains the total valence charge density
+- ! copy using RC_ADD to ensure that unused elements are properly zeroed
+- n_val = 0
+- CALL RC_ADD(CHTOT(1,1), 1.0_q, CHTOT(1,1), 0.0_q, n_val(1), GRIDC)
+- 
+- ! compute n_e = n_val + n_c
+- RWORK = 0
+- CALL RL_ADD(DENCOR(1), 1.0_q, DENCOR(1), 0.0_q, RWORK(1), GRIDC)
+- CALL FFT3D_RL2RC(RWORK,n_e)
+- n_e = n_e + n_val
+- !CALL AVG_GRID_RC(n_e, CWORK, 3)
+- !n_e = CWORK
+- 
+- ! compute total charge, q_sol
+- CALL GET_G0(n_val, q_sol)
+- q_sol = q_sol - ZVSUM
+- 
+- ! copy solute Hartree potential to phi_sol
+- phi_sol = 0
+- CALL RC_ADD(CVHAR(1), 1.0_q, CVHAR(1), 0.0_q, phi_sol(1), GRIDC)
+- !CALL AVG_GRID_RC(phi_sol, CWORK, 3)
+- !phi_sol = CWORK
+- IF (PRESENT(CVDIP)) THEN
+-!   CALL RC_ADD(phi_sol(1), 1.0_q, CVDIP(1), 1.0_q, phi_sol(1), GRIDC)
+-   CVDIP_RC = CVDIP
+-!   CALL SET_G0(CVDIP_RC,0._q)
+-   phi_sol(:) = phi_sol(:) + CVDIP_RC(:)
+-!   CALL SET_G0(phi_sol,0._q)
+- END IF
+- 
+- !------------------------------------------------------------------------------
+- ! set tolerance for outer loop, tol is in units of charge
++	dsol_io 'Begin Solvation calculations'
++	CALL START_TIMING("SOL")
++	 
++		 ALLOCATE(n_val(GRIDC%MPLWV), n_e(GRIDC%MPLWV), phi_sol(GRIDC%MPLWV))
++		 ALLOCATE(CWORK(GRIDC%MPLWV), RWORK(DIMREAL(GRIDC%MPLWV)))
++		 ALLOCATE(CVDIP_RC(GRIDC%MPLWV)) 
++		 CALL STOP_TIMING("SOL",IU6,"ALLOC")
++		 
++		 ! copy charge to n_val
++		 ! CHTOT(:,1) contains the total valence charge density
++		 ! copy using RC_ADD to ensure that unused elements are properly zeroed
++		 n_val = 0
++		 CALL RC_ADD(CHTOT(1,1), 1.0_q, CHTOT(1,1), 0.0_q, n_val(1), GRIDC)
++		 CALL STOP_TIMING("SOL",IU6,"NVAL")
++		 
++		 ! compute n_e = n_val + n_c
++		 RWORK = 0
++		 CALL RL_ADD(DENCOR(1), 1.0_q, DENCOR(1), 0.0_q, RWORK(1), GRIDC)
++		 CALL FFT3D_RL2RC(RWORK,n_e)
++		 n_e = n_e + n_val
++		 CALL STOP_TIMING("SOL",IU6,"DENCOR")
++		 !CALL AVG_GRID_RC(n_e, CWORK, 3)
++		 !n_e = CWORK
++		 
++		 ! compute total charge, q_sol
++		 CALL GET_G0(n_val, q_sol)
++		 q_sol = q_sol - ZVSUM
++		 CALL STOP_TIMING("SOL",IU6,"QSOL")
++		 
++		 ! copy solute Hartree potential to phi_sol
++		 phi_sol = 0
++		 CALL RC_ADD(CVHAR(1), 1.0_q, CVHAR(1), 0.0_q, phi_sol(1), GRIDC)
++		 CALL STOP_TIMING("SOL",IU6,"PHISOL")
++		 !CALL AVG_GRID_RC(phi_sol, CWORK, 3)
++	 !phi_sol = CWORK
++	 IF (PRESENT(CVDIP)) THEN
++	!   CALL RC_ADD(phi_sol(1), 1.0_q, CVDIP(1), 1.0_q, phi_sol(1), GRIDC)
++	   CVDIP_RC = CVDIP
++	!   CALL SET_G0(CVDIP_RC,0._q)
++		   phi_sol(:) = phi_sol(:) + CVDIP_RC(:)
++		!   CALL SET_G0(phi_sol,0._q)
++		 END IF
++		 CALL STOP_TIMING("SOL",IU6,"DIPOL")
++		
++	 !------------------------------------------------------------------------------
++	 ! set tolerance for outer loop, tol is in units of charge
+  !------------------------------------------------------------------------------
+  IF (rms_SCF > 0._q) THEN
+    ! set tolerance for LPB to 1/10 the current rms of the SCF residual
+    tol = rms_SCF/10._q
+    dsol_io ' rms_SCF = ', rms_SCF, 'tol = ', tol
+- ELSE
+-   ! for first SCF step or constant charge calculations, set LPB tolerance to tol_init
+-   tol = tol_init
+-   dsol_io' Setting tol to tol_init = ', tol_init
+- ENDIF
+- 
+- CALL STOP_TIMING("SOL",IU6,"INIT")
+- 
+- 
++	 ELSE
++	   ! for first SCF step or constant charge calculations, set LPB tolerance to tol_init
++		   tol = tol_init
++		   dsol_io' Setting tol to tol_init = ', tol_init
++		 ENDIF
++	 CALL STOP_TIMING("SOL",IU6,"TOL")
++	 
++	 
+  !-------------------------------------------------------------
+  !              BEGIN Solvation minimization
+  !           Compute Vcorr, the correction potential
+@@ -3555,8 +3577,9 @@
+    CASE DEFAULT
+       IF (IU0>=0) WRITE(IU0,*) 'ERROR: SOL_VCORRECTION: invalid value for ISOL'
+       STOP
+- END SELECT
+- dsol_io 'End minimization'
++	 END SELECT
++	 CALL STOP_TIMING("SOL",IU6,"SOLVER")
++	 dsol_io 'End minimization'
+  !-------------------------------------------------------------
+  !              END Solvation minimization
+  !-------------------------------------------------------------    
+@@ -3567,19 +3590,18 @@
+  !we need to subtract off Ecorr_band = n_val*Vcorr
+  ! since this will end up in the band energy
+  !-------------------------------------------------------------
+- Ecorr_band = D_PROD_RC(n_val,V_corr)
+- Ecorr_sol = A_corr - Ecorr_band - q_sol*EFERMI_ref
++	 Ecorr_band = D_PROD_RC(n_val,V_corr)
++	 CALL STOP_TIMING("SOL",IU6,"EBAND")
++	 Ecorr_sol = A_corr - Ecorr_band - q_sol*EFERMI_ref
++	 CALL STOP_TIMING("SOL",IU6,"ECORR")
+  
+  dsol_io 'Ecorr=', Ecorr_sol
+  dsol_io 'A_corr=', A_corr
+  dsol_io 'Ecorr_band=', Ecorr_band
+  
+- dsol_io 'End Solvation calculations'
+- 
+- CALL STOP_TIMING("SOL",IU6,"FINALIZE")
+- CALL SEPERATOR_TIMING(IU6)
+-
+-END SUBROUTINE SOL_VCORRECTION
++dsol_io 'End Solvation calculations'
++
++END SUBROUTINE SOL_VCORRECTION
+ 
+ 
+ !>=======================SUBROUTINE SET_RMS_SCF=======================
+@@ -3957,10 +3979,10 @@
+ ! write ionic and bound charges to files
+ !
+ !***********************************************************************
+-SUBROUTINE SET_SOL_WRITE
+- 
+- LDO_SOL = LSOL
+- LWRITE = .TRUE.
++SUBROUTINE SET_SOL_WRITE
++ 
++ LDO_SOL = LSOL
++ LWRITE = .TRUE.
+  
+  SELECT CASE (ISOL)
+    CASE (1)
+@@ -3971,12 +3993,35 @@
+       IF (IU0>=0) WRITE(IU0,*) 'ERROR: SET_SOL_WRITE: invalid value for ISOL'
+       STOP
+  END SELECT
+-
+-END SUBROUTINE SET_SOL_WRITE
+-
+-
+-
+-END MODULE solvation
++
++END SUBROUTINE SET_SOL_WRITE
++
++
++!******************** SUBROUTINE SET_SOL_NOWRITE ***********************
++!
++! Disable solvent-grid output while keeping solvent corrections active.
++!
++!***********************************************************************
++SUBROUTINE SET_SOL_NOWRITE
++
++ LDO_SOL = LSOL
++ LWRITE = .FALSE.
++
++ SELECT CASE (ISOL)
++   CASE (1)
++      CALL SET_SOL_NOWRITE_LPCM
++   CASE (2)
++      CALL SET_SOL_NOWRITE_NLPCM
++   CASE DEFAULT
++      IF (IU0>=0) WRITE(IU0,*) 'ERROR: SET_SOL_NOWRITE: invalid value for ISOL'
++      STOP
++ END SELECT
++
++END SUBROUTINE SET_SOL_NOWRITE
++
++
++
++END MODULE solvation
+ 
+ 
+ 

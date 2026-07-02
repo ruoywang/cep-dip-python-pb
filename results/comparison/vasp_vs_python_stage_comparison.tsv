@@ -1,0 +1,12 @@
+category	vasp_component	vasp_time_s	python_component	python_time_s	comment
+overall_total	VASP OUTCAR elapsed	180.737000	sum(Python stage_times.tsv)	379.861439	整体耗时；VASP还包括标准VASP初始化/势构造/收尾，Python是脚本阶段求和。
+read_input	RDINPUT	3.348500	read_inputs	14.369489	不是完全等价；Python这里还读reference场/配置等，VASP RDINPUT主要是CHGCAR/输入读入计时点。
+solute_potential_input	DENCOR + PHISOL	0.128300	solute_potential_and_dencor	5.220083	物理上最接近：DENCOR处理+solute Hartree potential准备。VASP另有POTLOK标准势构造，不等价于Python这行。
+vasp_standard_potential	POTLOK	61.105700	not in Python stage_times	0.000000	VASP标准势构造，Python脚本没有对应的完整VASP POTLOK流程。
+create_cavity	NCAVITY total over all calls	2.336200	create_cavity	3.672932	相近可比：构造cavity/介电/离子区域。VASP这里是6次调用总和。
+pb_all_fixsteps_no_write	sum SOL_VCORRECTION listed minus WRITE	101.472500	sum fixstep_0..4	356.598935	最核心对比：固定电荷下PB/溶剂迭代总耗时，不含最终体数据写出。
+field_write	WRITE PHI/RHOB/RHOION	21.549100	not included / not separated	0.000000	VASP最终写三个大体数据文件的时间。
+pb_linear_solve	NMINL total	62.533600	included in fixstep_*	356.598935	VASP PB线性求解主耗时；Python没有同名总项，只包含在fixstep里。
+local_field_root	EFZERO total	18.843500	included in fixstep_*	356.598935	非线性local-field factor逐格点求根；Python也在fixstep里但没有同名stage。
+bound_charge	UBOUND total	5.562200	included in fixstep_*	356.598935	计算束缚电荷RHOB；Python包含在fixstep内。
+ion_charge	UION total	2.058900	included in fixstep_*	356.598935	计算离子电荷RHOION；Python包含在fixstep内。

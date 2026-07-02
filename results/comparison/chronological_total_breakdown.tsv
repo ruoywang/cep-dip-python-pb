@@ -1,0 +1,12 @@
+order	stage	vasp_short_note	vasp_time_s	python_short_note	python_time_s
+1	read input	read CHGCAR/input	3.348500	read files	14.369489
+2	prepare before PB	other VASP setup/potential	54.366900	solute potential + core charge	5.220083
+3	build cavity	included in PB steps below	0.000000	solvent/ion cavity	3.672932
+4	PB step 1	PB solve step 1	60.583000	PB solve step 1	238.018492
+5	PB step 2	PB solve step 2	14.476000	PB solve step 2	50.703459
+6	PB step 3	PB solve step 3	7.573100	PB solve step 3	21.743475
+7	PB step 4	PB solve step 4	7.599400	PB solve step 4	21.708878
+8	PB step 5	PB solve step 5	6.054100	PB solve step 5	24.424631
+9	final PB step	final PB solve	5.186900	no separate Python step	0.000000
+10	write fields	write PHI/RHOB/RHOION	21.549100	not separated	0.000000
+TOTAL	total	VASP elapsed	180.737000	Python stage sum	379.861439

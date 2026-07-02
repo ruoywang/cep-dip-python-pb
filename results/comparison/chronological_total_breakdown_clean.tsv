@@ -1,0 +1,10 @@
+Stage	VASP what	VASP s	Python what	Python s
+read input	read CHGCAR/input	3.349	read files	14.369
+prepare before PB	other VASP setup/unassigned	54.367	solute potential from fixed CHGCAR	5.220
+build cavity	included in solvent iterations	0.000	solvent/ion cavity	3.673
+solvent iteration 1	PB solve iteration 1	60.583	PB solve fixstep_0	238.018
+solvent iteration 2	PB solve iteration 2	14.476	PB solve fixstep_1	50.703
+solvent iteration 3	PB solve iteration 3	7.573	PB solve fixstep_2	21.743
+solvent iteration 4	PB solve iteration 4	7.599	PB solve fixstep_3	21.709
+solvent iteration 5	PB solve iteration 5	6.054	PB solve fixstep_4	24.425
+total	VASP total	154.001	Python total	379.861
