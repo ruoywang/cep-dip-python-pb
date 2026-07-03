@@ -36,6 +36,13 @@ The retained final summaries are:
 
 ## Important Negative Result
 
+> **2026-07-02 caveat:** the user suspects the standalone 1D code that produced
+> this negative result was itself buggy — it predates the validated 3D
+> reproduction below. Treat the conclusion as "unvalidated route with one failed
+> (possibly buggy) attempt", not as settled physics. Any retry must be built on
+> the validated 3D baseline and compared term-by-term against the retained
+> reference fields.
+
 The earlier standalone 1D PB approximation was removed from the active tree.
 It was not a validated reproduction route. The reason is physical/numerical:
 plane-averaging before applying the nonlinear dielectric response does not

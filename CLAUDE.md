@@ -6,8 +6,10 @@ Validated reproduction of VASP/CEP-DIP implicit-solvent fields (PHI/RHOB/RHOION)
 from a frozen CHGCAR, via (a) a patched VASP build and (b) a pure-Python
 nonlinear PB solver. Reference case cal_18 (NiN-doped graphene slab).
 Correctness status: **validated** — VASP route PHI RMSE 1.7e-7 eV, Python route
-3.0e-3 eV. Current open front: performance (Python 2.1× slower than VASP;
-bottleneck is PB step 1). See README.md and docs/ for details.
+3.0e-3 eV. Performance: after the 2026-07 CPU round (fused OpenMP kernels,
+coarse-grid warm start, half-spectrum FFT) the full solve is 81 s vs VASP's
+181 s. Production defaults: `PB_RFFT=1` and `--coarse-init` on.
+See README.md, docs/, and results/perf_cpu_round1/ for details.
 
 ## Hard rules (user-mandated — do not relax)
 
@@ -18,16 +20,21 @@ bottleneck is PB step 1). See README.md and docs/ for details.
 2. **Validation gate.** Any change touching `pure_python/pb.py`,
    `solute_potential.py`, `dipole_correction.py`, `grid.py`, or `_pb_fast.c`
    goes on a branch and must rerun the cal_18 comparison before merging.
-   RMSE must not regress: PHI 3D ≤ 3.008e-03 eV, RHOB 1D ≤ 3.038e-06 e/Å³,
-   RHOION 1D ≤ 1.553e-07 e/Å³. Record the numbers in the commit message or
-   docs change log. Performance changes also record stage timings.
+   RMSE must not regress: PHI 3D ≤ 2.998e-03 eV, PHI 1D ≤ 2.364e-04 eV,
+   RHOB 1D ≤ 2.238e-06 e/Å³, RHOION 1D ≤ 6.848e-08 e/Å³ (best-known values,
+   step3_rfft 2026-07-02; small tolerance-noise excursions must be judged
+   against PHI first). Record the numbers in the commit message or docs
+   change log. Performance changes also record stage timings.
 3. **No VASP source in this repo, ever.** VASP/CEP-DIP changes are made in the
    tree at `$WORK/CEP-DIP`, then exported as whole-tree diffs into `patches/`
    (see patches/README.md for the layer stack). POTCAR and the large volumetric
    fields (CHGCAR/PHI/RHOB/RHOION) never enter the repo. Repo stays private.
-4. **Do not restart the 1D shortcut.** Planar-averaging before the nonlinear
-   dielectric response is refuted (docs/findings.md). Any dimensional reduction
-   starts from the 3D baseline with term-by-term numerical comparison.
+4. **The 1D shortcut is unvalidated, not forbidden.** The original negative
+   result (docs/findings.md) came from code the user now suspects was buggy —
+   it predates the validated 3D reproduction. Revisiting a 1D/reduced model is
+   a legitimate direction, but it MUST start from the validated 3D baseline
+   and be compared term-by-term against the retained reference fields; never
+   trust a reduced model that has not passed that comparison.
 
 ## External dependencies (not in this repo)
 

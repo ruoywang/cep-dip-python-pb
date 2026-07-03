@@ -65,6 +65,9 @@ repository and be compared numerically against the reference fields
 
 ## Performance status
 
-Same cal_18 fixed-CHGCAR solve: VASP 181 s vs pure Python 380 s (≈2.1×);
-the bottleneck is PB step 1 (238 s vs 61 s). Stage-by-stage numbers in
-`results/comparison/`.
+After the 2026-07 CPU optimization round (fused OpenMP kernels, coarse-grid
+warm start, half-spectrum FFT — `results/perf_cpu_round1/`,
+`docs/perf_cpu_round1.html`): full cal_18 solve **81 s** vs VASP's 181 s
+(2.2× faster), PB core 58 s vs ≈89 s. Accuracy improved on every gate metric
+(PHI 3D RMSE 2.997e-3 eV). Production defaults: `PB_RFFT=1`, `--coarse-init`.
+The original baseline comparison is retained in `results/comparison/`.
