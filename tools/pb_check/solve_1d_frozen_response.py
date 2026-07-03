@@ -216,13 +216,15 @@ def main() -> None:
     a3, ez3 = response_coefficient_3d(phi3_values, s_diel3, grid3, params)
     a_plain = plane_avg(a3)
     if args.avg == "field":
+        # exact ratio <A*Ez>/<Ez>; NO sign clipping — near the slab the
+        # water-region field opposes the planar average (lateral screening),
+        # so the effective coefficient is legitimately negative there.
         pz = plane_avg(a3 * ez3)
         ez = plane_avg(ez3)
         a1 = a_plain.copy()
         scale = np.max(np.abs(ez))
         mask = np.abs(ez) > 0.02 * scale
         a1[mask] = pz[mask] / ez[mask]
-        a1 = np.clip(a1, 0.0, None)
     else:
         a1 = a_plain
     mark("extract_response")
