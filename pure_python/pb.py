@@ -366,6 +366,20 @@ def dprod_rc(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.real(np.vdot(b, a)))
 
 
+def grid_dprod_rc(grid: Grid, a: np.ndarray, b: np.ndarray) -> float:
+    """Full-spectrum inner product; doubles non-self-conjugate modes in rfft mode."""
+    w = grid.spectral_weight
+    if w is None:
+        kern = _fused("dprod_rc")
+        if kern is not None:
+            return kern(np.ascontiguousarray(a), np.ascontiguousarray(b))
+        return dprod_rc(a, b)
+    kern = _fused("dprod_rc_w")
+    if kern is not None:
+        return kern(np.ascontiguousarray(a), np.ascontiguousarray(b), w)
+    return float(np.sum(w * (a.real * b.real + a.imag * b.imag)))
+
+
 def set_g0(a: np.ndarray, value: float) -> None:
     a[(0,) * a.ndim] = value
 
@@ -376,7 +390,7 @@ def get_g0(a: np.ndarray) -> float:
 
 def lapl_tensor(phi_g: np.ndarray, response: tuple, grid: Grid) -> np.ndarray:
     t_all = perf_counter()
-    gx, gy, gz, _ = grid.reciprocal_mesh()
+    gx, gy, gz = grid.deriv_mesh()
     t = perf_counter()
     premul = _fused("grad_premul")
     if premul is not None:
@@ -389,7 +403,7 @@ def lapl_tensor(phi_g: np.ndarray, response: tuple, grid: Grid) -> np.ndarray:
             grid.ifft_real(1j * TPI * gz * phi_g),
         ]
     _add_timing("lapl_tensor_grad_ifft", perf_counter() - t)
-    out = np.zeros(grid.shape, dtype=complex)
+    out = np.zeros(grid.spec_shape, dtype=complex)
     g_list = [gx, gy, gz]
     kind = response[0]
     if kind == "scalar":
@@ -666,21 +680,20 @@ def minimize_l(
 ) -> tuple[np.ndarray, float, int]:
     t_all = perf_counter()
     _, _, _, gsq = grid.reciprocal_mesh()
-    precond = np.zeros(grid.shape, dtype=float)
+    precond = np.zeros(grid.spec_shape, dtype=float)
     mask = gsq > 0.0
     precond[mask] = EDEPS / (TPI**2 * gsq[mask]) / grid.volume
     rm = _fused("rmulc")
     xpb = _fused("cxpby")
     axpy = _fused("caxpy")
-    dpf = _fused("dprod_rc")
 
     def _zmul(rr):
         return rm(precond, rr) if rm is not None else precond * rr
 
     def _dot(a, b):
-        return dpf(a, b) if dpf is not None else dprod_rc(a, b)
+        return grid_dprod_rc(grid, a, b)
 
-    dphi = np.zeros(grid.shape, dtype=complex)
+    dphi = np.zeros(grid.spec_shape, dtype=complex)
     r = np.ascontiguousarray(resid_g).copy()
     z = _zmul(r)
     lp0 = None
@@ -748,5 +761,5 @@ def residual_g(
     resid = grid.fft(n_b_values + n_ion_values) - resid
     cwork = l0_inv_op(resid, grid)
     rms0 = get_g0(resid)
-    rms = float(np.sqrt(rms0 * rms0 + dprod_rc(cwork, cwork)))
+    rms = float(np.sqrt(rms0 * rms0 + grid_dprod_rc(grid, cwork, cwork)))
     return resid, rms

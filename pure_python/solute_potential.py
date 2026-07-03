@@ -91,7 +91,7 @@ def dencor_values(
     positions_direct: np.ndarray,
     structure_factors: list[np.ndarray] | None = None,
 ) -> np.ndarray:
-    _, _, _, gsq = grid.reciprocal_mesh()
+    _, _, _, gsq = grid.reciprocal_mesh_full()
     g_abs = np.sqrt(gsq) * TPI
     dens_g = np.zeros(grid.shape, dtype=complex)
     slices = type_slices(counts)
@@ -101,11 +101,11 @@ def dencor_values(
         if entry.pspcor is None:
             continue
         dens_g += _interp_prho(entry.pspcor, g_abs, entry.psgmax) * sf
-    return grid.ifft_real(dens_g)
+    return grid.ifft_real_full(dens_g)
 
 
 def hartree_potential_g(charge_g: np.ndarray, grid: Grid) -> np.ndarray:
-    _, _, _, gsq = grid.reciprocal_mesh()
+    _, _, _, gsq = grid.reciprocal_mesh_full()
     out = np.zeros_like(charge_g, dtype=complex)
     mask = gsq > 0.0
     scale = EDEPS / grid.volume / (TPI**2)
@@ -120,7 +120,7 @@ def local_pseudopotential_g(
     positions_direct: np.ndarray,
     structure_factors: list[np.ndarray] | None = None,
 ) -> np.ndarray:
-    _, _, _, gsq = grid.reciprocal_mesh()
+    _, _, _, gsq = grid.reciprocal_mesh_full()
     g_abs = np.sqrt(gsq) * TPI
     cvps = np.zeros(grid.shape, dtype=complex)
     slices = type_slices(counts)
@@ -145,7 +145,7 @@ def solute_potential_g(
     timings: list[tuple[str, float]] | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     t = perf_counter()
-    valence_g = grid.fft(valence_values)
+    valence_g = grid.fft_full(valence_values)
     t = _mark(timings, "solute_fft_valence", t)
     slices = type_slices(counts)
     structure_factors = [structure_factor_for_positions(grid.shape, positions_direct[slc]) for slc in slices]

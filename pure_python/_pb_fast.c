@@ -366,6 +366,27 @@ static PyObject *dprod_rc_fast(PyObject *self, PyObject *args) {
     return PyFloat_FromDouble(sum);
 }
 
+/* ------------- weighted real vdot for half-spectrum inner products ------------- */
+
+static PyObject *dprod_rc_w(PyObject *self, PyObject *args) {
+    PyArrayObject *a, *b, *w;
+    if (!PyArg_ParseTuple(args, "O!O!O!", &PyArray_Type, &a, &PyArray_Type, &b, &PyArray_Type, &w)) return NULL;
+    if (!check_carray(a, NPY_CDOUBLE, "a") || !check_carray(b, NPY_CDOUBLE, "b") ||
+        !check_carray(w, NPY_DOUBLE, "w")) return NULL;
+    const npy_intp n = PyArray_SIZE(a);
+    const double *pa = (const double *)PyArray_DATA(a);
+    const double *pb = (const double *)PyArray_DATA(b);
+    const double *pw = (const double *)PyArray_DATA(w);
+    double sum = 0.0;
+    Py_BEGIN_ALLOW_THREADS
+    #pragma omp parallel for reduction(+:sum) schedule(static)
+    for (npy_intp i = 0; i < n; ++i) {
+        sum += pw[i] * (pa[2*i] * pb[2*i] + pa[2*i+1] * pb[2*i+1]);
+    }
+    Py_END_ALLOW_THREADS
+    return PyFloat_FromDouble(sum);
+}
+
 /* ------------- chi response: chi_perp, chi_factor from scaled |E| ------------- */
 
 static PyObject *chi_response(PyObject *self, PyObject *args) {
@@ -563,6 +584,7 @@ static PyMethodDef Methods[] = {
     {"cxpby", cxpby, METH_VARARGS, "p = z + beta*p (complex, real beta)."},
     {"rmulc", rmulc, METH_VARARGS, "real precond * complex r."},
     {"dprod_rc", dprod_rc_fast, METH_VARARGS, "real part of vdot(b,a) with OpenMP reduction."},
+    {"dprod_rc_w", dprod_rc_w, METH_VARARGS, "weighted real vdot for half-spectrum sums."},
     {"chi_response", chi_response, METH_VARARGS, "fused chi_perp/chi_factor build."},
     {"polarization_vec", polarization_vec, METH_VARARGS, "fused P/E vector build."},
     {"ion_density_values", ion_density_values, METH_VARARGS, "fused nonlinear ion density."},

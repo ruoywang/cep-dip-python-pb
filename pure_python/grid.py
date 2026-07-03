@@ -55,6 +55,10 @@ def _fft_backend() -> str:
     return os.environ.get("PB_FFT_BACKEND", "scipy").strip().lower()
 
 
+def _rfft_enabled() -> bool:
+    return os.environ.get("PB_RFFT", "0") not in ("", "0", "false", "False")
+
+
 def fused_kernel(name: str):
     if _pb_fast is None:
         return None
@@ -77,12 +81,40 @@ class Grid:
         return int(np.prod(self.shape))
 
     @cached_property
+    def rspec(self) -> bool:
+        # Half-spectrum (r2c/c2r) mode. Fixed at first use per process.
+        return _rfft_enabled()
+
+    @property
+    def spec_shape(self) -> tuple[int, int, int]:
+        if self.rspec:
+            return (self.shape[0], self.shape[1], self.shape[2] // 2 + 1)
+        return self.shape
+
+    @cached_property
+    def spectral_weight(self) -> np.ndarray | None:
+        """Mode multiplicity for half-spectrum inner products (None in full mode)."""
+        if not self.rspec:
+            return None
+        nx, ny, nz = self.shape
+        nzh = nz // 2 + 1
+        w = np.full((nx, ny, nzh), 2.0)
+        w[:, :, 0] = 1.0
+        if nz % 2 == 0:
+            w[:, :, nzh - 1] = 1.0
+        return np.ascontiguousarray(w)
+
+    @cached_property
     def reciprocal_no_2pi(self) -> np.ndarray:
         # Rows b_i satisfy a_i dot b_j = delta_ij. Fortran multiplies by TPI separately.
         return np.linalg.inv(self.cell).T
 
     def fft(self, real_values: np.ndarray) -> np.ndarray:
         # VASP's FFT3D_RL2RC stores the normalized reciprocal coefficients.
+        if self.rspec:
+            if scipy_fft is not None:
+                return scipy_fft.rfftn(real_values, workers=_fft_workers()) / self.ngrid
+            return np.fft.rfftn(real_values) / self.ngrid
         if _fft_backend() == "mkl" and mkl_fft is not None:
             return mkl_fft.fftn(real_values) / self.ngrid
         if _fft_backend() == "pyfftw" and pyfftw_fft is not None:
@@ -102,6 +134,10 @@ class Grid:
         # Inverse of the normalized convention above. Returns a contiguous
         # array (the .real of a complex ifft is a strided view, which the
         # fused C kernels cannot accept).
+        if self.rspec:
+            if scipy_fft is not None:
+                return scipy_fft.irfftn(recip_values * self.ngrid, s=self.shape, workers=_fft_workers())
+            return np.fft.irfftn(recip_values * self.ngrid, s=self.shape)
         if _fft_backend() == "mkl" and mkl_fft is not None:
             return np.ascontiguousarray(mkl_fft.ifftn(recip_values * self.ngrid).real)
         if _fft_backend() == "pyfftw" and pyfftw_fft is not None:
@@ -112,6 +148,17 @@ class Grid:
                     planner_effort="FFTW_ESTIMATE",
                 ).real
             )
+        if scipy_fft is not None:
+            return np.ascontiguousarray(scipy_fft.ifftn(recip_values * self.ngrid, workers=_fft_workers()).real)
+        return np.ascontiguousarray(np.fft.ifftn(recip_values * self.ngrid).real)
+
+    def fft_full(self, real_values: np.ndarray) -> np.ndarray:
+        # Always-full-spectrum transform (solute-potential path).
+        if scipy_fft is not None:
+            return scipy_fft.fftn(real_values, workers=_fft_workers()) / self.ngrid
+        return np.fft.fftn(real_values) / self.ngrid
+
+    def ifft_real_full(self, recip_values: np.ndarray) -> np.ndarray:
         if scipy_fft is not None:
             return np.ascontiguousarray(scipy_fft.ifftn(recip_values * self.ngrid, workers=_fft_workers()).real)
         return np.ascontiguousarray(np.fft.ifftn(recip_values * self.ngrid).real)
@@ -144,6 +191,63 @@ class Grid:
         nx, ny, nz = self.shape
         hx = np.fft.fftfreq(nx) * nx
         hy = np.fft.fftfreq(ny) * ny
+        if self.rspec:
+            hz = np.arange(nz // 2 + 1, dtype=float)
+        else:
+            hz = np.fft.fftfreq(nz) * nz
+        h, k, l = np.meshgrid(hx, hy, hz, indexing="ij")
+        b = self.reciprocal_no_2pi
+        gx = h * b[0, 0] + k * b[1, 0] + l * b[2, 0]
+        gy = h * b[0, 1] + k * b[1, 1] + l * b[2, 1]
+        gz = h * b[0, 2] + k * b[1, 2] + l * b[2, 2]
+        gsq = gx * gx + gy * gy + gz * gz
+        return gx, gy, gz, gsq
+
+    def deriv_mesh(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        return self._deriv_mesh
+
+    @cached_property
+    def _deriv_mesh(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """g-vectors used as derivative premultipliers (i*2pi*g).
+
+        In half-spectrum mode the Nyquist planes are zeroed: a derivative
+        component there is anti-Hermitian, which the full-spectrum path
+        discards through ifft(...).real, while a c2r transform would fold
+        it back in with the wrong sign. Zeroing reproduces the
+        full-spectrum semantics. Full mode returns the plain mesh.
+        """
+        if not self.rspec:
+            gx, gy, gz, _ = self._reciprocal_mesh
+            return gx, gy, gz
+        # Zero each LATTICE axis's Nyquist frequency before combining into
+        # cartesian components: an i*h term at h-Nyquist is anti-Hermitian
+        # (dropped by ifft(...).real in full-spectrum mode), while cross
+        # terms (i*k, i*l on that plane) are Hermitian and must be kept.
+        nx, ny, nz = self.shape
+        hx = np.fft.fftfreq(nx) * nx
+        hy = np.fft.fftfreq(ny) * ny
+        hz = np.arange(nz // 2 + 1, dtype=float)
+        if nx % 2 == 0:
+            hx[nx // 2] = 0.0
+        if ny % 2 == 0:
+            hy[ny // 2] = 0.0
+        if nz % 2 == 0:
+            hz[nz // 2] = 0.0
+        h, k, l = np.meshgrid(hx, hy, hz, indexing="ij")
+        b = self.reciprocal_no_2pi
+        gx = h * b[0, 0] + k * b[1, 0] + l * b[2, 0]
+        gy = h * b[0, 1] + k * b[1, 1] + l * b[2, 1]
+        gz = h * b[0, 2] + k * b[1, 2] + l * b[2, 2]
+        return (np.ascontiguousarray(gx), np.ascontiguousarray(gy), np.ascontiguousarray(gz))
+
+    def reciprocal_mesh_full(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        return self._reciprocal_mesh_full
+
+    @cached_property
+    def _reciprocal_mesh_full(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        nx, ny, nz = self.shape
+        hx = np.fft.fftfreq(nx) * nx
+        hy = np.fft.fftfreq(ny) * ny
         hz = np.fft.fftfreq(nz) * nz
         h, k, l = np.meshgrid(hx, hy, hz, indexing="ij")
         b = self.reciprocal_no_2pi
@@ -168,7 +272,7 @@ class Grid:
         return np.sqrt(x * x + y * y + z * z)
 
     def grad_from_recip(self, phi_g: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        gx, gy, gz, _ = self.reciprocal_mesh()
+        gx, gy, gz = self.deriv_mesh()
         premul = fused_kernel("grad_premul")
         mag3 = fused_kernel("magnitude3")
         if premul is not None and mag3 is not None:
@@ -185,10 +289,10 @@ class Grid:
         return ex, ey, ez, mag
 
     def div_real_vector(self, vx: np.ndarray, vy: np.ndarray, vz: np.ndarray) -> np.ndarray:
-        gx, gy, gz, _ = self.reciprocal_mesh()
+        gx, gy, gz = self.deriv_mesh()
         acc = fused_kernel("div_accum")
         if acc is not None:
-            out = np.zeros(self.shape, dtype=complex)
+            out = np.zeros(self.spec_shape, dtype=complex)
             f0 = np.ascontiguousarray(self.fft(vx))
             f1 = np.ascontiguousarray(self.fft(vy))
             f2 = np.ascontiguousarray(self.fft(vz))

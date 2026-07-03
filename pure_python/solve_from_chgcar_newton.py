@@ -48,14 +48,26 @@ def prolong_double(a_coarse: np.ndarray, grid_c: Grid, grid_f: Grid) -> np.ndarr
     coefficients transfer unchanged.
     """
     spec_c = grid_c.fft(a_coarse)
-    spec_f = np.zeros(grid_f.shape, dtype=complex)
+    spec_f = np.zeros(grid_f.spec_shape, dtype=complex)
     blocks = []
-    for n_c, n_f in zip(grid_c.shape, grid_f.shape):
+    for axis, (n_c, n_f) in enumerate(zip(grid_c.shape, grid_f.shape)):
         h = n_c // 2
-        blocks.append((
-            (slice(0, h), slice(0, h)),
-            (slice(h, n_c), slice(n_f - (n_c - h), n_f)),
-        ))
+        if grid_f.rspec:
+            # Coarse Nyquist planes are self-conjugate composites; embedding
+            # them as interior fine modes double-counts under c2r, so they
+            # are dropped (their weight in smooth fields is negligible).
+            if axis == 2:
+                blocks.append(((slice(0, h), slice(0, h)),))
+            else:
+                blocks.append((
+                    (slice(0, h), slice(0, h)),
+                    (slice(h + 1, n_c), slice(n_f - (n_c - h - 1), n_f)),
+                ))
+        else:
+            blocks.append((
+                (slice(0, h), slice(0, h)),
+                (slice(h, n_c), slice(n_f - (n_c - h), n_f)),
+            ))
     for (cx, fx) in blocks[0]:
         for (cy, fy) in blocks[1]:
             for (cz, fz) in blocks[2]:
@@ -190,7 +202,7 @@ def main() -> None:
     solute_timings: list[tuple[str, float]] = []
     cvhar_g, dencor = solute_potential_g(grid, valence_values, entries, counts, positions, solute_timings)
     extend_detail("solute_potential_and_dencor", solute_timings)
-    cvhar = grid.ifft_real(cvhar_g)
+    cvhar = grid.ifft_real_full(cvhar_g)
     mark_detail("solute_ifft_cvhar")
     n_e_density = (valence_values + dencor) / grid.volume
     mark_detail("solute_build_electron_density")
