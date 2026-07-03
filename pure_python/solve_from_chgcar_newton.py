@@ -23,7 +23,8 @@ from .pb import (
     derived_params,
     get_pb_timing,
     minimize_l,
-    nlpb_quantities,
+    nlpb_field_quantities,
+    nlpb_response_from_fields,
     reset_pb_timing,
     residual_g,
 )
@@ -33,6 +34,45 @@ from .solute_potential import solute_potential_g
 
 def rmse(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.sqrt(np.mean((a - b) ** 2)))
+
+
+def restrict_half(a: np.ndarray) -> np.ndarray:
+    """Decimate a field onto the half-resolution grid (even shapes only)."""
+    return np.ascontiguousarray(a[::2, ::2, ::2])
+
+
+def prolong_double(a_coarse: np.ndarray, grid_c: Grid, grid_f: Grid) -> np.ndarray:
+    """Fourier zero-padding prolongation from the half grid to the full grid.
+
+    The normalized FFT convention stores amplitudes, so low-frequency
+    coefficients transfer unchanged.
+    """
+    spec_c = grid_c.fft(a_coarse)
+    spec_f = np.zeros(grid_f.spec_shape, dtype=complex)
+    blocks = []
+    for axis, (n_c, n_f) in enumerate(zip(grid_c.shape, grid_f.shape)):
+        h = n_c // 2
+        if grid_f.rspec:
+            # Coarse Nyquist planes are self-conjugate composites; embedding
+            # them as interior fine modes double-counts under c2r, so they
+            # are dropped (their weight in smooth fields is negligible).
+            if axis == 2:
+                blocks.append(((slice(0, h), slice(0, h)),))
+            else:
+                blocks.append((
+                    (slice(0, h), slice(0, h)),
+                    (slice(h + 1, n_c), slice(n_f - (n_c - h - 1), n_f)),
+                ))
+        else:
+            blocks.append((
+                (slice(0, h), slice(0, h)),
+                (slice(h, n_c), slice(n_f - (n_c - h), n_f)),
+            ))
+    for (cx, fx) in blocks[0]:
+        for (cy, fy) in blocks[1]:
+            for (cz, fz) in blocks[2]:
+                spec_f[fx, fy, fz] = spec_c[cx, cy, cz]
+    return grid_f.ifft_real(spec_f)
 
 
 def solve_nlpb_for_phi_sol(
@@ -52,43 +92,42 @@ def solve_nlpb_for_phi_sol(
     phi_solv_g = grid.fft(phi_total - phi_sol)
     w_b = normalized_gaussian_kernel_g(grid, float(params["R_B"]) if float(params["R_B"]) > 0.0 else float(params["A_K"]))
     history: list[tuple[int, float, int, float]] = []
-    n_b = np.zeros(grid.shape)
-    n_ion = np.zeros(grid.shape)
+    fields = None
     for outer in range(max_outer + 1):
-        n_b, n_ion, response, ekappa2, _ = nlpb_quantities(phi_total, s_ion, s_diel, grid, params, w_b=w_b)
-        if response is None:
-            raise RuntimeError("Newton solve requires dielectric response")
+        if fields is None:
+            fields = nlpb_field_quantities(phi_total, s_ion, s_diel, grid, params, w_b)
+        n_b = fields["n_b"]
+        n_ion = fields["n_ion"]
         resid, rms = residual_g(phi_solv_g, n_b, n_ion, q_sol, grid)
         if rms < tol and outer >= 1:
             history.append((outer, rms, 0, 0.0))
             break
+        response, ekappa2 = nlpb_response_from_fields(fields, s_ion, s_diel, grid, params)
+        if response is None:
+            raise RuntimeError("Newton solve requires dielectric response")
         dphi_g, cg_rms, cg_iter = minimize_l(resid, response, ekappa2, w_b, grid, max(rms / 10.0, tol), cg_max_iter)
         dphi_real = grid.ifft_real(dphi_g)
         alpha = 1.0
-        accepted_phi = phi_total
-        accepted_phi_solv_g = phi_solv_g
         accepted_rms = float("inf")
         for _ in range(7):
             trial_phi = phi_total + alpha * dphi_real
             trial_phi_solv_g = phi_solv_g + alpha * dphi_g
-            trial_b, trial_ion, _, _, _ = nlpb_quantities(
-                trial_phi, s_ion, s_diel, grid, params, w_b=w_b, need_response=False
-            )
-            _, trial_rms = residual_g(trial_phi_solv_g, trial_b, trial_ion, q_sol, grid)
+            trial_fields = nlpb_field_quantities(trial_phi, s_ion, s_diel, grid, params, w_b)
+            _, trial_rms = residual_g(trial_phi_solv_g, trial_fields["n_b"], trial_fields["n_ion"], q_sol, grid)
             if trial_rms <= rms or alpha <= 1.0 / 64.0:
-                accepted_phi = trial_phi
-                accepted_phi_solv_g = trial_phi_solv_g
+                phi_total = trial_phi
+                phi_solv_g = trial_phi_solv_g
+                fields = trial_fields
                 accepted_rms = trial_rms
                 break
             alpha *= 0.5
-        phi_total = accepted_phi
-        phi_solv_g = accepted_phi_solv_g
         history.append((outer, rms, cg_iter, accepted_rms))
         if progress_path is not None:
             with progress_path.open("a") as f:
                 f.write(f"{fixstep}\t{outer}\t{rms:.12e}\t{cg_iter}\t{accepted_rms:.12e}\n")
-    n_b, n_ion, _, _, _ = nlpb_quantities(phi_total, s_ion, s_diel, grid, params, w_b=w_b, need_response=False)
-    return phi_total, n_b, n_ion, phi_solv_g, history
+    if fields is None:
+        fields = nlpb_field_quantities(phi_total, s_ion, s_diel, grid, params, w_b)
+    return phi_total, fields["n_b"], fields["n_ion"], phi_solv_g, history
 
 
 def main() -> None:
@@ -104,6 +143,8 @@ def main() -> None:
     parser.add_argument("--tol", type=float, default=1.0e-3)
     parser.add_argument("--max-outer", type=int, default=20)
     parser.add_argument("--cg-max-iter", type=int, default=200)
+    parser.add_argument("--coarse-init", type=int, default=1,
+                        help="warm-start fixstep 0 from a half-resolution Newton solve")
     args = parser.parse_args()
 
     out = Path(args.out_dir)
@@ -161,7 +202,7 @@ def main() -> None:
     solute_timings: list[tuple[str, float]] = []
     cvhar_g, dencor = solute_potential_g(grid, valence_values, entries, counts, positions, solute_timings)
     extend_detail("solute_potential_and_dencor", solute_timings)
-    cvhar = grid.ifft_real(cvhar_g)
+    cvhar = grid.ifft_real_full(cvhar_g)
     mark_detail("solute_ifft_cvhar")
     n_e_density = (valence_values + dencor) / grid.volume
     mark_detail("solute_build_electron_density")
@@ -204,6 +245,26 @@ def main() -> None:
         progress_path.parent.mkdir(parents=True, exist_ok=True)
         if step == 0:
             progress_path.write_text("fixstep\touter\trms\tcg_iter\tpost_step_rms\n")
+        if step == 0 and args.coarse_init and all(n % 2 == 0 for n in grid.shape):
+            t_coarse = perf_counter()
+            grid_c = Grid(chg.cell, tuple(n // 2 for n in grid.shape))
+            phi_c, _, _, _, _ = solve_nlpb_for_phi_sol(
+                np.zeros(grid_c.shape),
+                restrict_half(phi_sol),
+                restrict_half(s_ion),
+                restrict_half(s_diel),
+                grid_c,
+                params,
+                cfg["q_sol"],
+                args.tol,
+                args.max_outer,
+                args.cg_max_iter,
+                progress_path,
+                -1,
+            )
+            phi_total = prolong_double(phi_c, grid_c, grid)
+            stage_lines.append(f"coarse_init\t{perf_counter() - t_coarse:.6f}")
+            (out / "stage_times.tsv").write_text("\n".join(stage_lines) + "\n")
         phi_total, n_b, n_ion, _, history = solve_nlpb_for_phi_sol(
             phi_total,
             phi_sol,
