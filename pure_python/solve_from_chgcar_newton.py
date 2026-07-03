@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 from time import perf_counter
 
@@ -145,7 +146,19 @@ def main() -> None:
     parser.add_argument("--cg-max-iter", type=int, default=200)
     parser.add_argument("--coarse-init", type=int, default=1,
                         help="warm-start fixstep 0 from a half-resolution Newton solve")
+    parser.add_argument("--backend", choices=["numpy", "torch"], default="numpy",
+                        help="Newton-PCG solve backend (torch runs on --device)")
+    parser.add_argument("--device", default="cpu",
+                        help="torch device for --backend torch (cpu, cuda, cuda:0)")
     args = parser.parse_args()
+
+    if args.backend == "torch":
+        from .torch_pb import make_numpy_io_solver
+        import torch as _torch
+
+        _dtype = _torch.float64 if os.environ.get("PB_TORCH_DTYPE", "float64") == "float64" else _torch.float32
+        _solve = make_numpy_io_solver(device=args.device, dtype=_dtype)
+        globals()["solve_nlpb_for_phi_sol"] = _solve
 
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
