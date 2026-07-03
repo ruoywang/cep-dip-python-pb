@@ -141,7 +141,8 @@ def main():
     cell = np.asarray(cfg["cell_A"], dtype=float)
     pos_frac = np.asarray(cfg["positions_direct"], dtype=float) % 1.0
     counts = list(cfg["counts"])
-    zv_types = [float(z) for z in cfg["zval"]]
+    zv_map = {k: float(v) for k, v in cfg["zval"].items()}
+    zv_types = [zv_map[el] for el in cfg["elements"]]
     zvals = np.concatenate([[zv] * c for zv, c in zip(zv_types, counts)])
     params = pb.derived_params(cfg["solvation"])
     q_sol = -TOTAL_CHARGE
