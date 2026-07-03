@@ -46,8 +46,10 @@ See README.md, docs/, and results/perf_cpu_round1/ for details.
 
 ## Conventions
 
-- Compute runs live on $SCRATCH and reference repo code via
-  `PYTHONPATH=$WORK/repos/cep-dip-python-pb`; do not copy solver code into run dirs.
+- Compute runs live in run directories under the user's current working
+  directory (they open sessions where they want to work) and reference repo
+  code via `PYTHONPATH=$WORK/repos/cep-dip-python-pb`; do not copy solver
+  code into run dirs, and do not create top-level directories elsewhere.
 - Result review pages are self-contained English HTML
   (docs/index.html = docs/results_overview.html, served via GitHub Pages).
 - Conversation with the user is in Chinese; repo content and HTML in English.
