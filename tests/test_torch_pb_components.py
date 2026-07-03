@@ -51,9 +51,11 @@ def _rel(a, b):
     return float(np.max(np.abs(a - b)) / denom)
 
 
-def main() -> None:
-    ng = Grid(CELL, SHAPE)
-    tg = tp.TorchGrid(CELL, SHAPE, device="cpu", dtype=torch.float64)
+def run_parity(rspec: bool) -> bool:
+    os.environ["PB_RFFT"] = "1" if rspec else "0"
+    ng = Grid(CELL, SHAPE)  # reads PB_RFFT on first .rspec access
+    tg = tp.TorchGrid(CELL, SHAPE, device="cpu", dtype=torch.float64, rspec=rspec)
+    assert bool(ng.rspec) == rspec, "numpy Grid rspec did not follow PB_RFFT"
     params = pb.derived_params(SOLV)
 
     def t2n(x):
@@ -124,15 +126,16 @@ def main() -> None:
     results["solve_rhoion"] = _rel(t2n(ni2_t), ni2_n)
     print(f"numpy last rms={hist_n[-1][1]:.3e}  torch last rms={hist_t[-1][1]:.3e}")
 
-    print("\n=== component max relative diff (torch vs numpy) ===")
+    mode = "half-spectrum (rfft)" if rspec else "full-spectrum"
+    print(f"\n=== component max relative diff, {mode} (torch vs numpy) ===")
     worst = 0.0
     for k, v in results.items():
         flag = "OK" if v < 1e-9 else ("~" if v < 1e-5 else "FAIL")
         worst = max(worst, v)
         print(f"  {k:16s} {v:.2e}  {flag}")
     ok = all(v < 1e-6 for v in results.values())
-    print(f"\nworst = {worst:.2e}  ->  {'ALL PASS' if ok else 'MISMATCH'}")
-    sys.exit(0 if ok else 1)
+    print(f"worst = {worst:.2e}  ->  {'PASS' if ok else 'MISMATCH'}")
+    return ok
 
 
 def _solve_numpy(phi_sol, s_ion, s_diel, ng, params, q_sol):
@@ -140,6 +143,14 @@ def _solve_numpy(phi_sol, s_ion, s_diel, ng, params, q_sol):
     return solve_nlpb_for_phi_sol(
         np.zeros(SHAPE), phi_sol, s_ion, s_diel, ng, params, q_sol, 1e-3, 20, 200,
     )
+
+
+def main() -> None:
+    ok_full = run_parity(rspec=False)
+    ok_half = run_parity(rspec=True)
+    print(f"\nfull-spectrum: {'PASS' if ok_full else 'FAIL'}   "
+          f"half-spectrum: {'PASS' if ok_half else 'FAIL'}")
+    sys.exit(0 if (ok_full and ok_half) else 1)
 
 
 if __name__ == "__main__":

@@ -54,10 +54,41 @@ regression — both backends give the same 3.0046e-3 here.)
   float64. A usable f32/mixed-precision path would need a better
   preconditioner or mixed-precision CG — deferred.
 
+## Update: rfft half-spectrum path
+
+`TorchGrid(rspec=...)` now supports the half-spectrum (r2c/c2r) mode,
+mirroring numpy Grid: `spec_shape = (nx, ny, nz//2+1)`, reciprocal mesh
+with `hz = arange(nz//2+1)`, derivative premultipliers with each lattice
+axis's Nyquist frequency zeroed, and the `spectral_weight` (2x for
+non-self-conjugate modes, 1 at the DC/Nyquist planes) used in `dprod_rc`.
+`rspec=None` reads `PB_RFFT` like the numpy path. Half and full spectrum
+select `torch.fft.rfftn`/`irfftn(s=shape)` vs `fftn`/`ifftn` respectively.
+
+Component parity (tests/test_torch_pb_components.py now runs BOTH spectra):
+half-spectrum torch agrees with numpy half-spectrum to <= 2.9e-13 across
+every operator and the short end-to-end solve.
+
+cal_18 half-spectrum end-to-end (torch GPU f64), last fixstep vs VASP
+reference — reproduces the numpy production (step3_rfft) best-known values
+and passes every gate:
+
+| quantity   | torch rfft   | cep-dip gate  |
+|------------|--------------|---------------|
+| PHI RMSE   | 2.997378e-3  | <= 2.998e-3   |
+| PHI_z RMSE | 2.362971e-4  | <= 2.364e-4   |
+| RHOB_z     | 2.237948e-6  | <= 2.238e-6   |
+| RHOION_z   | 6.847208e-8  | <= 6.848e-8   |
+
+Timing (cal_18, GPU f64): half-spectrum 98 s wall vs full-spectrum 130 s
+vs numpy 147 s; steady fixsteps 1.2-1.8 s (half) vs 1.3-2.0 s (full);
+coarse_init 20 s (half) vs 36 s (full). Half spectrum ~1.3-1.6x faster and
+half the memory. Run dir 3-torch-pb-cal18 (job rfft2).
+
 ## Next
 
-- rfft half-spectrum path (≈2x FFT, half memory) — currently full-spectrum.
 - Put the cavity/solute setup on GPU too (in MACE this is the Gaussian
   surrogate, already GPU-friendly), removing the remaining host work.
 - Wire the torch backend into polar-mace pb_solvent (device-resident, no
   host round-trip) and measure real training s/step at ~0.3 A.
+- float32/mixed-precision CG only worth it off-A100 (A100 FP64:FP32 = 1:2,
+  so the ceiling is ~2x, same as rfft but far riskier).

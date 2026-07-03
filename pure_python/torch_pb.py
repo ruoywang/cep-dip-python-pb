@@ -13,17 +13,19 @@ potential setup (POTCAR Hartree/local-pseudopotential) stays on the numpy
 side / is replaced by the MACE Gaussian surrogate; its result enters here
 as the ready-made `phi_sol` tensor.
 
-Design choices for the first validated version:
-- full spectrum (no rfft half-spectrum); matches numpy PB_RFFT=0 for
-  bit-level component comparison. Half-spectrum is a later speed option.
-- float64 by default to clear the cal_18 validation gate; float32 is a
-  documented speed/accuracy trade to measure afterwards.
+Design choices:
+- both full and half spectrum (rfft) supported via TorchGrid(rspec=...);
+  rspec=None reads PB_RFFT like the numpy Grid. Numerics match numpy
+  bit-for-bit per mode (component test covers both).
+- float64 by default to clear the cal_18 validation gate; float32 diverges
+  on this ill-conditioned problem (documented, use f64).
 - the fused C-kernel paths of the numpy solver are irrelevant here (pure
   torch); numerics follow the numpy fallback branches exactly.
 """
 
 from __future__ import annotations
 
+import os
 from typing import Optional, Tuple
 
 import numpy as np
@@ -74,9 +76,9 @@ def make_numpy_io_solver(device="cpu", dtype=torch.float64):
 
 
 class TorchGrid:
-    """torch mirror of pure_python.grid.Grid (full-spectrum path)."""
+    """torch mirror of pure_python.grid.Grid (full- and half-spectrum)."""
 
-    def __init__(self, cell, shape, device=None, dtype=torch.float64):
+    def __init__(self, cell, shape, device=None, dtype=torch.float64, rspec=None):
         self.device = torch.device(device) if device is not None else torch.device("cpu")
         self.dtype = dtype
         self.cdtype = torch.complex128 if dtype == torch.float64 else torch.complex64
@@ -86,6 +88,11 @@ class TorchGrid:
         self.shape = tuple(int(s) for s in shape)
         self.ngrid = int(np.prod(self.shape))
         self.volume = float(abs(np.linalg.det(np.asarray(cell, dtype=float))))
+        if rspec is None:
+            rspec = os.environ.get("PB_RFFT", "0") not in ("", "0", "false", "False")
+        self.rspec = bool(rspec)
+        nx, ny, nz = self.shape
+        self.spec_shape = (nx, ny, nz // 2 + 1) if self.rspec else self.shape
         # b_i rows satisfy a_i . b_j = delta_ij (no 2pi), matching numpy Grid.
         self.recip_no_2pi = torch.as_tensor(
             np.linalg.inv(np.asarray(cell, dtype=float)).T,
@@ -100,18 +107,46 @@ class TorchGrid:
 
     def _build_meshes(self) -> None:
         nx, ny, nz = self.shape
+        b = self.recip_no_2pi
         hx = self._fftfreq_n(nx)
         hy = self._fftfreq_n(ny)
-        hz = self._fftfreq_n(nz)
+        if self.rspec:
+            hz = torch.arange(nz // 2 + 1, device=self.device, dtype=self.dtype)
+        else:
+            hz = self._fftfreq_n(nz)
         h, k, l = torch.meshgrid(hx, hy, hz, indexing="ij")
-        b = self.recip_no_2pi
         gx = h * b[0, 0] + k * b[1, 0] + l * b[2, 0]
         gy = h * b[0, 1] + k * b[1, 1] + l * b[2, 1]
         gz = h * b[0, 2] + k * b[1, 2] + l * b[2, 2]
         self.gx, self.gy, self.gz = gx, gy, gz
         self.gsq = gx * gx + gy * gy + gz * gz
-        # derivative premultipliers = plain mesh in full-spectrum mode
-        self.dgx, self.dgy, self.dgz = gx, gy, gz
+
+        if self.rspec:
+            # Derivative premultipliers: zero each lattice axis's Nyquist
+            # frequency (an i*h term there is anti-Hermitian, dropped by the
+            # full-spectrum ifft(...).real; c2r would fold it back wrong).
+            dhx = self._fftfreq_n(nx).clone()
+            dhy = self._fftfreq_n(ny).clone()
+            dhz = torch.arange(nz // 2 + 1, device=self.device, dtype=self.dtype).clone()
+            if nx % 2 == 0:
+                dhx[nx // 2] = 0.0
+            if ny % 2 == 0:
+                dhy[ny // 2] = 0.0
+            if nz % 2 == 0:
+                dhz[nz // 2] = 0.0
+            dh, dk, dl = torch.meshgrid(dhx, dhy, dhz, indexing="ij")
+            self.dgx = dh * b[0, 0] + dk * b[1, 0] + dl * b[2, 0]
+            self.dgy = dh * b[0, 1] + dk * b[1, 1] + dl * b[2, 1]
+            self.dgz = dh * b[0, 2] + dk * b[1, 2] + dl * b[2, 2]
+            # inner-product multiplicity for the half spectrum
+            w = torch.full(self.spec_shape, 2.0, device=self.device, dtype=self.dtype)
+            w[:, :, 0] = 1.0
+            if nz % 2 == 0:
+                w[:, :, (nz // 2 + 1) - 1] = 1.0
+            self.spectral_weight = w
+        else:
+            self.dgx, self.dgy, self.dgz = gx, gy, gz
+            self.spectral_weight = None
 
         # cartesian z of each grid point (for the vacuum smooth box)
         fx = (torch.arange(nx, device=self.device, dtype=self.dtype) / nx)[:, None, None]
@@ -132,9 +167,13 @@ class TorchGrid:
 
     # -- transforms (amplitude convention: /ngrid on forward) -------------
     def fft(self, real_values: torch.Tensor) -> torch.Tensor:
+        if self.rspec:
+            return torch.fft.rfftn(real_values.to(self.dtype)) / self.ngrid
         return torch.fft.fftn(real_values.to(self.cdtype)) / self.ngrid
 
     def ifft_real(self, recip_values: torch.Tensor) -> torch.Tensor:
+        if self.rspec:
+            return torch.fft.irfftn(recip_values * self.ngrid, s=self.shape).to(self.dtype)
         return torch.fft.ifftn(recip_values * self.ngrid).real.to(self.dtype)
 
     def to_tensor(self, a) -> torch.Tensor:
@@ -173,8 +212,11 @@ class TorchGrid:
         a[0, 0, 0] = value
 
     def dprod_rc(self, a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
-        # real(vdot(b, a)) = sum(conj(b) * a).real ; full-spectrum weight 1
-        return (b.conj() * a).real.sum()
+        # Full-spectrum inner product; half-spectrum doubles non-self-
+        # conjugate modes via spectral_weight (matches numpy grid_dprod_rc).
+        if self.spectral_weight is None:
+            return (b.conj() * a).real.sum()
+        return (self.spectral_weight * (a.real * b.real + a.imag * b.imag)).sum()
 
 
 # -- real-space convolution kernels (torch) -------------------------------
@@ -422,7 +464,7 @@ def _lapl_tensor(phi_g, response, grid: TorchGrid) -> torch.Tensor:
         grid.ifft_real(1j * TPI * grid.dgy * phi_g),
         grid.ifft_real(1j * TPI * grid.dgz * phi_g),
     ]
-    out = torch.zeros(grid.shape, dtype=grid.cdtype, device=grid.device)
+    out = torch.zeros(grid.spec_shape, dtype=grid.cdtype, device=grid.device)
     kind = response[0]
     if kind == "scalar":
         scalar = response[1]
@@ -461,7 +503,7 @@ def _residual_g(phi_solv_g, n_b, n_ion, q_sol, grid: TorchGrid):
 
 
 def _minimize_l(resid_g, response, ekappa2, w_b, grid: TorchGrid, tol, max_iter=200):
-    precond = torch.zeros(grid.shape, dtype=grid.dtype, device=grid.device)
+    precond = torch.zeros(grid.spec_shape, dtype=grid.dtype, device=grid.device)
     mask = grid.gsq > 0.0
     precond[mask] = EDEPS / (TPI ** 2 * grid.gsq[mask]) / grid.volume
 
@@ -471,7 +513,7 @@ def _minimize_l(resid_g, response, ekappa2, w_b, grid: TorchGrid, tol, max_iter=
     def dot(a, b):
         return grid.dprod_rc(a, b)
 
-    dphi = torch.zeros(grid.shape, dtype=grid.cdtype, device=grid.device)
+    dphi = torch.zeros(grid.spec_shape, dtype=grid.cdtype, device=grid.device)
     r = resid_g.clone()
     z = zmul(r)
     lp0 = None
