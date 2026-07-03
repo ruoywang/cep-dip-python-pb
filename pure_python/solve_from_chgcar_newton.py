@@ -6,7 +6,7 @@ from time import perf_counter
 
 import numpy as np
 
-from src.vasp_volumetric import read_vasp_volumetric, write_profile
+from tools.vasp_volumetric import read_vasp_volumetric, write_profile
 
 from .config import load_config
 from .dipole_correction import (

@@ -6,7 +6,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from src.vasp_inputs import incar_float, read_chgcar, read_incar, read_poscar, read_potcar_zvals, zval_total
+from tools.vasp_inputs import incar_float, read_chgcar, read_incar, read_poscar, read_potcar_zvals, zval_total
 
 
 CASE_DIR = ROOT.parent / "data" / "case_cal18"

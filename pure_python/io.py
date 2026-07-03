@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from src.vasp_volumetric import VolumetricData
+from tools.vasp_volumetric import VolumetricData
 
 
 def write_vasp_like(path: str | Path, template: VolumetricData, values: np.ndarray, label: str) -> None:

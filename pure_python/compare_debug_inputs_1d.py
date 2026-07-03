@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 
-from src.vasp_volumetric import read_vasp_volumetric, write_profile
+from tools.vasp_volumetric import read_vasp_volumetric, write_profile
 
 from .config import load_config
 from .grid import EDEPS, TPI, Grid

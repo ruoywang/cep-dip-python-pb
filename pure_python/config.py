@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 
-from src.vasp_volumetric import read_vasp_volumetric
+from tools.vasp_volumetric import read_vasp_volumetric
 
 
 DEFAULTS: dict[str, Any] = {

@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 from scipy.optimize import brentq
 
-from src.vasp_volumetric import read_vasp_volumetric, write_profile
+from tools.vasp_volumetric import read_vasp_volumetric, write_profile
 
 from .config import load_config
 from .dipole_correction import (
