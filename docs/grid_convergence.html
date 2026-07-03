@@ -90,7 +90,16 @@
          background: color-mix(in srgb, var(--ink) 5%, transparent);
          padding: 1px 5px; border-radius: 4px; }
   footer { margin-top: 56px; font-size: 12.5px; color: var(--muted); }
+  .sitenav { max-width: 1080px; margin: 0 auto; padding: 14px 24px 0; }
+  .sitenav a { display: inline-flex; align-items: center; gap: 6px;
+    font: 12.5px var(--mono); color: var(--muted); text-decoration: none;
+    border: 1px solid var(--grid); border-radius: 999px; padding: 4px 13px;
+    transition: color .12s ease, border-color .12s ease; }
+  .sitenav a:hover { color: var(--ink); border-color: var(--muted); }
 </style>
+
+<div class="sitenav"><a href="./">&#8592; Reports</a></div>
+
 
 <div class="wrap">
 <header>

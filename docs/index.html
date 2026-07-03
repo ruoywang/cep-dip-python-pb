@@ -3,84 +3,124 @@
   :root {
     --plane: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e;
     --muted: #898781; --grid: #e1e0d9; --border: rgba(11,11,11,0.10);
-    --accent: #2a78d6;
+    --accent: #2a78d6; --green: #1baf7a; --amber: #eda100; --purple: #4a3aa7;
+    --good-text: #006300;
     --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --plane: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7;
       --muted: #898781; --grid: #2c2c2a; --border: rgba(255,255,255,0.10);
-      --accent: #3987e5;
+      --accent: #3987e5; --green: #199e70; --amber: #c98500; --purple: #9085e9;
+      --good-text: #0ca30c;
     }
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--plane); color: var(--ink);
          font: 15px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  .wrap { max-width: 760px; margin: 0 auto; padding: 56px 24px 72px; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 52px 24px 72px; }
   .eyebrow { font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
-             color: var(--muted); margin-bottom: 6px; }
-  h1 { font-size: 26px; margin: 0 0 8px; }
-  .lede { color: var(--ink-2); margin: 0 0 36px; max-width: 58ch; }
-  .report {
-    display: block; text-decoration: none; color: inherit;
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 8px; padding: 18px 22px; margin-bottom: 14px;
-    transition: border-color .15s ease;
-  }
-  .report:hover { border-color: var(--accent); }
-  .report .date { font: 12px var(--mono); color: var(--muted); margin-bottom: 4px; }
-  .report h2 { font-size: 16.5px; margin: 0 0 6px; color: var(--accent); }
-  .report p { margin: 0; font-size: 13.5px; color: var(--ink-2); }
-  .report .tag { display: inline-block; font: 11px var(--mono); letter-spacing: .06em;
-    text-transform: uppercase; color: var(--muted); border: 1px solid var(--grid);
-    border-radius: 999px; padding: 1px 9px; margin-left: 8px; vertical-align: 1px; }
-  footer { margin-top: 44px; font-size: 12.5px; color: var(--muted); }
+             color: var(--muted); margin-bottom: 8px; }
+  h1 { font-size: 30px; line-height: 1.25; margin: 0 0 10px; text-wrap: balance; }
+  .lede { color: var(--ink-2); margin: 0; max-width: 62ch; }
+  .lede a { color: var(--accent); }
+
+  .config { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 0; }
+  .config .pill { font: 12px var(--mono); color: var(--ink-2);
+    border: 1px solid var(--grid); border-radius: 999px; padding: 3px 12px;
+    background: var(--surface); }
+  .config .pill b { color: var(--ink); font-weight: 600; }
+
+  .grouplabel { font-size: 12px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--muted); margin: 40px 0 12px; display: flex; align-items: center; gap: 12px; }
+  .grouplabel::after { content: ""; flex: 1; height: 1px; background: var(--grid); }
+
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 760px) { .cards { grid-template-columns: 1fr; } }
+  .report { display: flex; flex-direction: column; text-decoration: none;
+    color: inherit; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 20px 22px 18px;
+    transition: border-color .15s ease, transform .15s ease; position: relative; }
+  .report:hover { border-color: var(--ac); transform: translateY(-1px); }
+  .report::before { content: ""; position: absolute; left: 0; top: 14px; bottom: 14px;
+    width: 3px; border-radius: 0 3px 3px 0; background: var(--ac); }
+  .report .meta { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .report .date { font: 12px var(--mono); color: var(--muted); }
+  .report .tag { font: 11px var(--mono); letter-spacing: .06em; text-transform: uppercase;
+    color: var(--ac); border: 1px solid color-mix(in srgb, var(--ac) 35%, transparent);
+    border-radius: 999px; padding: 1px 9px; }
+  .report h2 { font-size: 16.5px; line-height: 1.4; margin: 0 0 8px; color: var(--ink); }
+  .report p { margin: 0 0 14px; font-size: 13.5px; color: var(--ink-2); flex: 1; }
+  .report .stat { font: 13px var(--mono); color: var(--ink-2);
+    border-top: 1px solid var(--grid); padding-top: 10px; }
+  .report .stat b { color: var(--ink); font-size: 15px; }
+  .report .stat .u { color: var(--muted); }
+
+  footer { margin-top: 48px; font-size: 12.5px; color: var(--muted); }
   footer a { color: var(--accent); }
 </style>
 
 <div class="wrap">
-  <div class="eyebrow">cep-dip-python-pb</div>
-  <h1>Reports</h1>
-  <p class="lede">Self-contained result pages for the CEP-DIP fixed-density
-  solvent-field reproduction project. Newest first. Source data lives in
-  the repository's <span style="font-family:var(--mono)">results/</span> directory.</p>
+  <header>
+    <div class="eyebrow">cep-dip-python-pb</div>
+    <h1>Solver Reports</h1>
+    <p class="lede">Result pages for the pure-Python / torch reproduction of the
+    VASPsol&#8202;/&#8202;CEP-DIP nonlinear Poisson&ndash;Boltzmann implicit solvent —
+    validation against reference fields, performance rounds, and the numerical
+    studies behind the MACE training configuration. Training-side reports live on
+    the companion
+    <a href="https://ruoywang.github.io/polar-mace-planar/">polar-mace-planar site</a>.</p>
+    <div class="config">
+      <span class="pill">production: <b>torch GPU · float64 · rfft</b></span>
+      <span class="pill">solvent layer: <b>ρ_ion + ρ_b (include_bound)</b></span>
+      <span class="pill">training grid: <b>0.15 Å</b></span>
+      <span class="pill">gate: <b>cal_18 · PHI ≤ 2.998×10⁻³ eV</b></span>
+    </div>
+  </header>
 
-  <a class="report" href="grid_convergence.html">
-    <div class="date">2026-07-03<span class="tag">convergence</span></div>
-    <h2>PB Grid Convergence on the Training Cell — 0.15 Å It Is</h2>
-    <p>Real training-set structure (cal_1): neither solvent-charge channel
-    converges alone on coarse grids, but ionic+bound errors cancel — the
-    combined term holds to ≤0.02 V through 0.15 Å and degrades fast beyond.
-    Includes selectable per-grid charge/potential profile comparison.</p>
-  </a>
+  <div class="grouplabel">Numerical studies</div>
+  <div class="cards">
+    <a class="report" href="grid_convergence.html" style="--ac: var(--green)">
+      <div class="meta"><span class="date">2026-07-03</span><span class="tag">convergence</span></div>
+      <h2>PB Grid Convergence on the Training Cell — 0.15&nbsp;Å It Is</h2>
+      <p>Real training structure (cal_1): neither solvent-charge channel converges
+      alone on coarse grids, but ionic+bound errors cancel. Selectable per-grid
+      charge/potential profile comparison; cliff shown to be cell-dependent.</p>
+      <div class="stat"><b>+0.017&nbsp;V</b> <span class="u">combined-term error @0.15&nbsp;Å · ~2.5&nbsp;s/structure</span></div>
+    </a>
+    <a class="report" href="gpu_torch_port.html" style="--ac: var(--purple)">
+      <div class="meta"><span class="date">2026-07-03</span><span class="tag">gpu port</span></div>
+      <h2>GPU (torch) Port — Correct, Speed Is Workload-Dependent</h2>
+      <p>Line-for-line torch translation of the Newton-PCG solver. Bit-for-bit
+      NumPy agreement, all cal_18 gates pass in float64; float32 diverges. One-time
+      overhead dominates single solves; the steady state is where GPU wins.</p>
+      <div class="stat"><b>4.7×</b> <span class="u">steady-state per-fixstep speedup vs CPU</span></div>
+    </a>
+  </div>
 
-  <a class="report" href="gpu_torch_port.html">
-    <div class="date">2026-07-03<span class="tag">gpu port</span></div>
-    <h2>PB Solver GPU (torch) Port — Correct, Speed Is Workload-Dependent</h2>
-    <p>Line-for-line torch translation of the Newton-PCG solver. Reproduces
-    NumPy bit-for-bit and passes every cal_18 gate in float64. On a single
-    high-res solve the GPU is not faster (one-time overhead dominates), but the
-    steady per-step cost is 4.7× lower — training is the favorable regime.</p>
-  </a>
-
-  <a class="report" href="perf_cpu_round1.html">
-    <div class="date">2026-07-02<span class="tag">performance</span></div>
-    <h2>PB Solver CPU Optimization — 383 s → 81 s (4.7×)</h2>
-    <p>Fused OpenMP kernels, coarse-grid warm start, and half-spectrum FFTs.
-    All accuracy gates passed with improved RMSE on every metric; now 2.2×
-    faster than the native VASP solve.</p>
-  </a>
-
-  <a class="report" href="results_overview.html">
-    <div class="date">2026-07-02<span class="tag">validation</span></div>
-    <h2>Fixed-Density Reproduction — cal_18 Validation Results</h2>
-    <p>The three-stage verification chain: VASP fixed-CHGCAR reproduction
-    (PHI RMSE 1.7×10⁻⁷ eV), input-term alignment, and the pure-Python
-    end-to-end Newton solve (3.0×10⁻³ eV).</p>
-  </a>
+  <div class="grouplabel">Performance &amp; validation</div>
+  <div class="cards">
+    <a class="report" href="perf_cpu_round1.html" style="--ac: var(--amber)">
+      <div class="meta"><span class="date">2026-07-02</span><span class="tag">performance</span></div>
+      <h2>CPU Optimization — 383&nbsp;s → 81&nbsp;s</h2>
+      <p>Fused OpenMP kernels, coarse-grid warm start, and half-spectrum FFTs.
+      All accuracy gates passed with improved RMSE on every metric; 2.2× faster
+      than the native VASP solve.</p>
+      <div class="stat"><b>4.7×</b> <span class="u">overall wall-time reduction</span></div>
+    </a>
+    <a class="report" href="results_overview.html" style="--ac: var(--accent)">
+      <div class="meta"><span class="date">2026-07-02</span><span class="tag">validation</span></div>
+      <h2>Fixed-Density Reproduction — cal_18 Validation</h2>
+      <p>The three-stage verification chain: VASP fixed-CHGCAR reproduction,
+      input-term alignment, and the pure-Python end-to-end Newton solve against
+      the reference PHI/RHOB/RHOION fields.</p>
+      <div class="stat"><b>3.0×10⁻³&nbsp;eV</b> <span class="u">PHI RMSE, Python route (VASP route 1.7×10⁻⁷)</span></div>
+    </a>
+  </div>
 
   <footer>
     Repository: <a href="https://github.com/ruoywang/cep-dip-python-pb">ruoywang/cep-dip-python-pb</a>
-    (private) · pages are self-contained HTML, no external dependencies.
+    (private) · companion: <a href="https://ruoywang.github.io/polar-mace-planar/">polar-mace-planar reports</a>
+    · pages are self-contained HTML, no external dependencies.
   </footer>
 </div>
