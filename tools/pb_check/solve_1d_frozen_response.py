@@ -114,24 +114,27 @@ def ekappa2_1d(phi: np.ndarray, s_ion: np.ndarray, params: dict) -> np.ndarray |
     return float(params["n_max"]) * float(params["alpha0_ion"]) * s_ion * ek
 
 
-def frozen_densities(phi, s_ion, a1, grid, params, w_b):
-    """n_b with frozen response A(z); n_ion fully nonlinear."""
+def frozen_densities(phi, s_ion, a1, grid, params, w_b, p_off=None):
+    """n_b with frozen response A(z) (+ optional offset P_off); ions nonlinear."""
     phi_g = grid.fft(np.ascontiguousarray(phi))
     ex, ey, ez, _ = grid.grad_from_recip(-np.conj(w_b) * phi_g)
     n_ion = ion_density_values_from_phi(phi, s_ion, grid, params)
-    div_p = grid.div_real_vector(a1 * ex, a1 * ey, a1 * ez)
+    pz = a1 * ez
+    if p_off is not None:
+        pz = pz + p_off
+    div_p = grid.div_real_vector(a1 * ex, a1 * ey, pz)
     n_b = grid.ifft_real(-w_b * div_p) * grid.volume
     return n_b, n_ion
 
 
-def solve_frozen(phi_total, phi_sol, s_ion, a1, grid, params, q_sol, tol, max_outer, cg_max_iter):
+def solve_frozen(phi_total, phi_sol, s_ion, a1, grid, params, q_sol, tol, max_outer, cg_max_iter, p_off=None):
     phi_solv_g = grid.fft(phi_total - phi_sol)
     w_b = normalized_gaussian_kernel_g(
         grid, float(params["R_B"]) if float(params["R_B"]) > 0.0 else float(params["A_K"])
     )
     response = ("scalar", np.ascontiguousarray(a1 * EDEPS))
     history = []
-    n_b, n_ion = frozen_densities(phi_total, s_ion, a1, grid, params, w_b)
+    n_b, n_ion = frozen_densities(phi_total, s_ion, a1, grid, params, w_b, p_off)
     for outer in range(max_outer + 1):
         resid, rms_val = residual_g(phi_solv_g, n_b, n_ion, q_sol, grid)
         if rms_val < tol and outer >= 1:
@@ -146,7 +149,7 @@ def solve_frozen(phi_total, phi_sol, s_ion, a1, grid, params, q_sol, tol, max_ou
         for _ in range(7):
             trial_phi = phi_total + alpha * dphi_real
             trial_solv_g = phi_solv_g + alpha * dphi_g
-            tb, ti = frozen_densities(trial_phi, s_ion, a1, grid, params, w_b)
+            tb, ti = frozen_densities(trial_phi, s_ion, a1, grid, params, w_b, p_off)
             _, trial_rms = residual_g(trial_solv_g, tb, ti, q_sol, grid)
             if trial_rms <= rms_val or alpha <= 1.0 / 64.0:
                 phi_total = trial_phi
@@ -169,7 +172,7 @@ def main() -> None:
     parser.add_argument("--rhoion-ref", default="data/case_cal18/RHOION")
     parser.add_argument("--phi3d", default=None,
                         help="3D potential file for response extraction (default: --phi-ref)")
-    parser.add_argument("--avg", choices=("plain", "field"), default="field")
+    parser.add_argument("--avg", choices=("plain", "field", "affine"), default="affine")
     parser.add_argument("--out-dir", default="pb_1d_test/frozen")
     parser.add_argument("--fixsol-steps", type=int, default=5)
     parser.add_argument("--tol", type=float, default=1.0e-3)
@@ -215,7 +218,14 @@ def main() -> None:
     phi3_values = phi3.values.reshape(phi3.grid, order="F")
     a3, ez3 = response_coefficient_3d(phi3_values, s_diel3, grid3, params)
     a_plain = plane_avg(a3)
-    if args.avg == "field":
+    p_off = None
+    if args.avg == "affine":
+        # affine closure P = A*E + P_off: smooth positive A (CG-safe) plus a
+        # frozen offset absorbing the polarization present where <Ez> = 0
+        # (laterally driven). Exact at the reference field by construction.
+        a1 = a_plain
+        p_off = plane_avg(a3 * ez3) - a1 * plane_avg(ez3)
+    elif args.avg == "field":
         # exact ratio <A*Ez>/<Ez>; NO sign clipping — near the slab the
         # water-region field opposes the planar average (lateral screening),
         # so the effective coefficient is legitimately negative there.
@@ -263,7 +273,7 @@ def main() -> None:
         phi_sol = cvhar1 + cvdip_z[None, None, :]
         phi_total, n_b, n_ion, history = solve_frozen(
             phi_total, phi_sol, s_ion1, a1, grid1, params, q_sol,
-            args.tol, args.max_outer, args.cg_max_iter,
+            args.tol, args.max_outer, args.cg_max_iter, p_off,
         )
         qsol_cache, dsol_cache = solvent_moments(n_b + n_ion, chg.cell)
         dt = perf_counter() - t_fix
