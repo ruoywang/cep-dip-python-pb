@@ -14,6 +14,7 @@ except Exception:  # pragma: no cover - optional acceleration extension.
 
 from .grid import (
     BOLKEV,
+    fused_kernel as _fused,
     EDEPS,
     MOLAR,
     TPI,
@@ -247,6 +248,18 @@ def update_from_total_phi(
 
 
 def ion_density_values_from_phi(phi: np.ndarray, s_ion: np.ndarray, grid: Grid, params: dict) -> np.ndarray:
+    kern = _fused("ion_density_values")
+    if kern is not None:
+        return kern(
+            np.ascontiguousarray(phi),
+            np.ascontiguousarray(s_ion),
+            float(params["ZBETA"]),
+            float(params["theta_b"]),
+            float(params["n_max"]),
+            float(params["invBETA"]),
+            grid.volume,
+            1 if bool(params["LNLION"]) else 0,
+        )
     x = float(params["ZBETA"]) * phi
     theta = float(params["theta_b"])
     if bool(params["LNLION"]) and theta > 0.0:
@@ -365,13 +378,18 @@ def lapl_tensor(phi_g: np.ndarray, response: tuple, grid: Grid) -> np.ndarray:
     t_all = perf_counter()
     gx, gy, gz, _ = grid.reciprocal_mesh()
     t = perf_counter()
-    grads = [
-        grid.ifft_real(1j * TPI * gx * phi_g),
-        grid.ifft_real(1j * TPI * gy * phi_g),
-        grid.ifft_real(1j * TPI * gz * phi_g),
-    ]
+    premul = _fused("grad_premul")
+    if premul is not None:
+        ax, ay, az = premul(gx, gy, gz, np.ascontiguousarray(phi_g))
+        grads = [grid.ifft_real(ax), grid.ifft_real(ay), grid.ifft_real(az)]
+    else:
+        grads = [
+            grid.ifft_real(1j * TPI * gx * phi_g),
+            grid.ifft_real(1j * TPI * gy * phi_g),
+            grid.ifft_real(1j * TPI * gz * phi_g),
+        ]
     _add_timing("lapl_tensor_grad_ifft", perf_counter() - t)
-    out = np.zeros_like(phi_g)
+    out = np.zeros(grid.shape, dtype=complex)
     g_list = [gx, gy, gz]
     kind = response[0]
     if kind == "scalar":
@@ -382,17 +400,32 @@ def lapl_tensor(phi_g: np.ndarray, response: tuple, grid: Grid) -> np.ndarray:
             _add_timing("lapl_tensor_work_fft", perf_counter() - t)
     elif kind == "tensor_field":
         chi_perp, chi_factor, ex, ey, ez = response[1:]
-        e = [ex, ey, ez]
-        t = perf_counter()
-        dot = ex * grads[0] + ey * grads[1] + ez * grads[2]
-        _add_timing("lapl_tensor_dot", perf_counter() - t)
-        for i in range(3):
+        tw = _fused("tensor_work")
+        acc = _fused("div_accum")
+        if tw is not None and acc is not None:
             t = perf_counter()
-            work = chi_perp * grads[i] + chi_factor * e[i] * dot
+            w0, w1, w2 = tw(chi_perp, chi_factor, ex, ey, ez, grads[0], grads[1], grads[2])
             _add_timing("lapl_tensor_work_build", perf_counter() - t)
             t = perf_counter()
-            out += 1j * TPI * g_list[i] * grid.fft(work)
+            f0 = np.ascontiguousarray(grid.fft(w0))
+            f1 = np.ascontiguousarray(grid.fft(w1))
+            f2 = np.ascontiguousarray(grid.fft(w2))
             _add_timing("lapl_tensor_work_fft", perf_counter() - t)
+            t = perf_counter()
+            acc(out, gx, gy, gz, f0, f1, f2)
+            _add_timing("lapl_tensor_dot", perf_counter() - t)
+        else:
+            e = [ex, ey, ez]
+            t = perf_counter()
+            dot = ex * grads[0] + ey * grads[1] + ez * grads[2]
+            _add_timing("lapl_tensor_dot", perf_counter() - t)
+            for i in range(3):
+                t = perf_counter()
+                work = chi_perp * grads[i] + chi_factor * e[i] * dot
+                _add_timing("lapl_tensor_work_build", perf_counter() - t)
+                t = perf_counter()
+                out += 1j * TPI * g_list[i] * grid.fft(work)
+                _add_timing("lapl_tensor_work_fft", perf_counter() - t)
     else:
         raise ValueError(f"unknown dielectric response kind: {kind}")
     _add_timing("lapl_tensor_total", perf_counter() - t_all)
@@ -402,6 +435,21 @@ def lapl_tensor(phi_g: np.ndarray, response: tuple, grid: Grid) -> np.ndarray:
 def l_op(dphi_g: np.ndarray, response: tuple, ekappa2: np.ndarray | None, w_b: np.ndarray, grid: Grid) -> np.ndarray:
     t_all = perf_counter()
     _, _, _, gsq = grid.reciprocal_mesh()
+    cm = _fused("conj_mul")
+    comb = _fused("wb_combine")
+    axpy = _fused("caxpy")
+    if cm is not None and comb is not None and axpy is not None:
+        dphi_c = np.ascontiguousarray(dphi_g)
+        cwork = cm(w_b, dphi_c)
+        lap = lapl_tensor(cwork, response, grid)
+        out = comb(w_b, np.ascontiguousarray(lap), gsq, dphi_c, -grid.volume / EDEPS)
+        if ekappa2 is not None:
+            t = perf_counter()
+            real = grid.ifft_real(dphi_c)
+            axpy(out, np.ascontiguousarray(grid.fft(ekappa2 * real)), grid.volume / EDEPS)
+            _add_timing("l_op_ekappa_fft", perf_counter() - t)
+        _add_timing("l_op_total", perf_counter() - t_all)
+        return out
     cwork = np.conj(w_b) * dphi_g
     lp = w_b * lapl_tensor(cwork, response, grid)
     lp += -(TPI**2) * gsq * dphi_g
@@ -414,6 +462,179 @@ def l_op(dphi_g: np.ndarray, response: tuple, ekappa2: np.ndarray | None, w_b: n
     return -grid.volume / EDEPS * lp
 
 
+def nlpb_field_quantities(
+    phi: np.ndarray,
+    s_ion: np.ndarray,
+    s_diel: np.ndarray,
+    grid: Grid,
+    params: dict,
+    w_b: np.ndarray,
+) -> dict:
+    """Field-dependent quantities needed for trial residuals and for the response."""
+    t_all = perf_counter()
+    phi_c = np.ascontiguousarray(phi)
+    t = perf_counter()
+    phi_g = grid.fft(phi_c)
+    _add_timing("nlpb_fft_phi", perf_counter() - t)
+    t = perf_counter()
+    cm = _fused("conj_mul")
+    if cm is not None:
+        cwork = cm(w_b, np.ascontiguousarray(phi_g))
+        np.negative(cwork, out=cwork)
+        ex, ey, ez, emag = grid.grad_from_recip(cwork)
+    else:
+        ex, ey, ez, emag = grid.grad_from_recip(-np.conj(w_b) * phi_g)
+    _add_timing("nlpb_grad", perf_counter() - t)
+    t = perf_counter()
+    f_loc = local_field_factor(emag, params)
+    _add_timing("nlpb_local_field_factor", perf_counter() - t)
+    t = perf_counter()
+    s4 = _fused("scale4_inplace")
+    if s4 is not None:
+        s4(ex, ey, ez, emag, f_loc)
+    else:
+        ex *= f_loc
+        ey *= f_loc
+        ez *= f_loc
+        emag *= f_loc
+    _add_timing("nlpb_scale_field", perf_counter() - t)
+
+    t = perf_counter()
+    n_ion_values = ion_density_values_from_phi(phi_c, s_ion, grid, params)
+    _add_timing("nlpb_ion", perf_counter() - t)
+
+    t = perf_counter()
+    pv = _fused("polarization_vec")
+    if pv is not None:
+        px, py, pz = pv(
+            ex, ey, ez, emag,
+            np.ascontiguousarray(s_diel),
+            float(params["PBETA"]),
+            float(params["alpha_pol"]) / EDEPS,
+            float(params["alpha0_rot"]) / EDEPS,
+            float(params["N_MOL"]),
+            1 if bool(params["LNLDIEL"]) else 0,
+        )
+    else:
+        y = float(params["PBETA"]) * emag
+        if bool(params["LNLDIEL"]):
+            g = np.empty_like(y)
+            small = y < 2.0e-4
+            large = y > 100.0
+            mid = ~(small | large)
+            g[small] = 1.0
+            g[large] = 3.0 * (1.0 - 1.0 / y[large]) / y[large]
+            g[mid] = 3.0 * (1.0 / np.tanh(y[mid]) - 1.0 / y[mid]) / y[mid]
+        else:
+            g = np.ones_like(y)
+        polar_over_eps = float(params["alpha0_rot"]) / EDEPS * g + float(params["alpha_pol"]) / EDEPS
+        p_over_e = float(params["N_MOL"]) * s_diel * polar_over_eps
+        px = p_over_e * ex
+        py = p_over_e * ey
+        pz = p_over_e * ez
+    _add_timing("nlpb_dielectric_scalar", perf_counter() - t)
+    t = perf_counter()
+    div_p_g = grid.div_real_vector(px, py, pz)
+    n_b_values = grid.ifft_real(-w_b * div_p_g) * grid.volume
+    _add_timing("nlpb_bound_fft", perf_counter() - t)
+    _add_timing("nlpb_total_no_response", perf_counter() - t_all)
+    return {
+        "phi": phi_c,
+        "ex": ex,
+        "ey": ey,
+        "ez": ez,
+        "emag": emag,
+        "n_b": n_b_values,
+        "n_ion": n_ion_values,
+    }
+
+
+def nlpb_response_from_fields(
+    fields: dict,
+    s_ion: np.ndarray,
+    s_diel: np.ndarray,
+    grid: Grid,
+    params: dict,
+) -> tuple[tuple, np.ndarray | None]:
+    t_all = perf_counter()
+    phi = fields["phi"]
+    emag = fields["emag"]
+    t = perf_counter()
+    ekappa2 = None
+    if bool(params["LION"]):
+        ek = _fused("ekappa2_values")
+        if ek is not None:
+            ekappa2 = ek(
+                phi,
+                np.ascontiguousarray(s_ion),
+                float(params["ZBETA"]),
+                float(params["theta_b"]),
+                float(params["n_max"]),
+                float(params["alpha0_ion"]),
+                1 if bool(params["LNLION"]) else 0,
+            )
+        else:
+            x_ion = float(params["ZBETA"]) * phi
+            theta = float(params["theta_b"])
+            if bool(params["LNLION"]):
+                ekappa2 = np.zeros_like(phi)
+                not_large = np.abs(x_ion) <= 100.0
+                x2 = np.empty_like(phi)
+                small = np.abs(x_ion) < 2.0e-4
+                x2[small] = 0.5 * x_ion[small] ** 2
+                x2[~small] = np.cosh(np.clip(x_ion[~small], -100.0, 100.0)) - 1.0
+                ekappa2[not_large] = (
+                    1.0 + (1.0 - theta) * x2[not_large]
+                ) / (1.0 + theta * x2[not_large]) ** 2
+            else:
+                ekappa2 = np.ones_like(phi)
+            ekappa2 = float(params["n_max"]) * float(params["alpha0_ion"]) * s_ion * ekappa2
+    _add_timing("nlpb_ekappa2", perf_counter() - t)
+
+    t = perf_counter()
+    if bool(params["LNLDIEL"]):
+        cr = _fused("chi_response")
+        if cr is not None:
+            chi_perp, chi_factor = cr(
+                emag,
+                np.ascontiguousarray(s_diel),
+                float(params["PBETA"]),
+                float(params["alpha_pol"]),
+                float(params["alpha0_rot"]),
+                float(params["invalpha_sic"]),
+                float(params["N_MOL"]),
+            )
+        else:
+            x = float(params["PBETA"]) * emag
+            chi_par = np.empty_like(phi)
+            chi_perp = np.empty_like(phi)
+            small = x < 2.0e-4
+            large = x > 100.0
+            mid = ~(small | large)
+            chi_par[small] = 1.0
+            chi_perp[small] = 1.0
+            chi_par[large] = 3.0 / (x[large] ** 2)
+            chi_perp[large] = 3.0 * (1.0 - 1.0 / x[large]) / x[large]
+            chi_par[mid] = 3.0 * (1.0 / x[mid] ** 2 - 1.0 / np.sinh(x[mid]) ** 2)
+            chi_perp[mid] = 3.0 * (1.0 / np.tanh(x[mid]) - 1.0 / x[mid]) / x[mid]
+            chi_par = float(params["alpha_pol"]) + float(params["alpha0_rot"]) * chi_par
+            chi_perp = float(params["alpha_pol"]) + float(params["alpha0_rot"]) * chi_perp
+            chi_par = float(params["N_MOL"]) * s_diel / (1.0 / chi_par - float(params["invalpha_sic"]))
+            chi_perp = float(params["N_MOL"]) * s_diel / (1.0 / chi_perp - float(params["invalpha_sic"]))
+            inv_e2 = np.zeros_like(phi)
+            nz = emag >= 2.0e-4 / max(float(params["PBETA"]), 1.0e-300)
+            inv_e2[nz] = 1.0 / (emag[nz] ** 2)
+            chi_factor = (chi_par - chi_perp) * inv_e2
+        response = ("tensor_field", chi_perp, chi_factor, fields["ex"], fields["ey"], fields["ez"])
+    else:
+        alpha = float(params["alpha0_rot"]) + float(params["alpha_pol"])
+        scalar = float(params["N_MOL"]) * s_diel / (1.0 / alpha - float(params["invalpha_sic"]))
+        response = ("scalar", scalar)
+    _add_timing("nlpb_response", perf_counter() - t)
+    _add_timing("nlpb_total_response", perf_counter() - t_all)
+    return response, ekappa2
+
+
 def nlpb_quantities(
     phi: np.ndarray,
     s_ion: np.ndarray,
@@ -423,119 +644,15 @@ def nlpb_quantities(
     w_b: np.ndarray | None = None,
     need_response: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, tuple | None, np.ndarray | None, np.ndarray]:
-    t_all = perf_counter()
-    t = perf_counter()
-    phi_g = grid.fft(phi)
-    _add_timing("nlpb_fft_phi", perf_counter() - t)
     if w_b is None:
         t = perf_counter()
         w_b = normalized_gaussian_kernel_g(grid, float(params["R_B"]) if float(params["R_B"]) > 0.0 else float(params["A_K"]))
         _add_timing("nlpb_build_wb", perf_counter() - t)
-    t = perf_counter()
-    ex, ey, ez, emag = grid.grad_from_recip(-np.conj(w_b) * phi_g)
-    _add_timing("nlpb_grad", perf_counter() - t)
-    t = perf_counter()
-    f_loc = local_field_factor(emag, params)
-    _add_timing("nlpb_local_field_factor", perf_counter() - t)
-    t = perf_counter()
-    ex *= f_loc
-    ey *= f_loc
-    ez *= f_loc
-    emag *= f_loc
-    _add_timing("nlpb_scale_field", perf_counter() - t)
-
-    t = perf_counter()
-    x_ion = float(params["ZBETA"]) * phi
-    theta = float(params["theta_b"])
-    if bool(params["LNLION"]) and theta > 0.0:
-        n_work = np.empty_like(phi)
-        large = np.abs(x_ion) > 100.0
-        small = np.abs(x_ion) < np.sqrt(theta) * 2.0e-4
-        mid = ~(large | small)
-        n_work[large] = np.sign(x_ion[large])
-        n_work[small] = theta * x_ion[small]
-        denom = 1.0 + theta * (np.cosh(x_ion[mid]) - 1.0)
-        n_work[mid] = theta * np.sinh(x_ion[mid]) / denom
-    elif bool(params["LNLION"]):
-        n_work = np.sinh(np.clip(x_ion, -100.0, 100.0))
-    else:
-        n_work = x_ion
-    n_ion_values = -float(params["n_max"]) * float(params["invBETA"]) * float(params["ZBETA"]) * s_ion * n_work
-    n_ion_values *= grid.volume
-    _add_timing("nlpb_ion", perf_counter() - t)
-
-    t = perf_counter()
-    y = float(params["PBETA"]) * emag
-    if bool(params["LNLDIEL"]):
-        g = np.empty_like(y)
-        small = y < 2.0e-4
-        large = y > 100.0
-        mid = ~(small | large)
-        g[small] = 1.0
-        g[large] = 3.0 * (1.0 - 1.0 / y[large]) / y[large]
-        g[mid] = 3.0 * (1.0 / np.tanh(y[mid]) - 1.0 / y[mid]) / y[mid]
-    else:
-        g = np.ones_like(y)
-    polar_over_eps = float(params["alpha0_rot"]) / EDEPS * g + float(params["alpha_pol"]) / EDEPS
-    p_over_e = float(params["N_MOL"]) * s_diel * polar_over_eps
-    _add_timing("nlpb_dielectric_scalar", perf_counter() - t)
-    t = perf_counter()
-    div_p_g = grid.div_real_vector(p_over_e * ex, p_over_e * ey, p_over_e * ez)
-    n_b_values = grid.ifft_real(-w_b * div_p_g) * grid.volume
-    _add_timing("nlpb_bound_fft", perf_counter() - t)
-
+    fields = nlpb_field_quantities(phi, s_ion, s_diel, grid, params, w_b)
     if not need_response:
-        _add_timing("nlpb_total_no_response", perf_counter() - t_all)
-        return n_b_values, n_ion_values, None, None, w_b
-
-    t = perf_counter()
-    ekappa2 = None
-    if bool(params["LION"]):
-        if bool(params["LNLION"]):
-            ekappa2 = np.zeros_like(phi)
-            not_large = np.abs(x_ion) <= 100.0
-            x2 = np.empty_like(phi)
-            small = np.abs(x_ion) < 2.0e-4
-            x2[small] = 0.5 * x_ion[small] ** 2
-            x2[~small] = np.cosh(np.clip(x_ion[~small], -100.0, 100.0)) - 1.0
-            ekappa2[not_large] = (
-                1.0 + (1.0 - theta) * x2[not_large]
-            ) / (1.0 + theta * x2[not_large]) ** 2
-        else:
-            ekappa2 = np.ones_like(phi)
-        ekappa2 = float(params["n_max"]) * float(params["alpha0_ion"]) * s_ion * ekappa2
-    _add_timing("nlpb_ekappa2", perf_counter() - t)
-
-    t = perf_counter()
-    if bool(params["LNLDIEL"]):
-        x = float(params["PBETA"]) * emag
-        chi_par = np.empty_like(phi)
-        chi_perp = np.empty_like(phi)
-        small = x < 2.0e-4
-        large = x > 100.0
-        mid = ~(small | large)
-        chi_par[small] = 1.0
-        chi_perp[small] = 1.0
-        chi_par[large] = 3.0 / (x[large] ** 2)
-        chi_perp[large] = 3.0 * (1.0 - 1.0 / x[large]) / x[large]
-        chi_par[mid] = 3.0 * (1.0 / x[mid] ** 2 - 1.0 / np.sinh(x[mid]) ** 2)
-        chi_perp[mid] = 3.0 * (1.0 / np.tanh(x[mid]) - 1.0 / x[mid]) / x[mid]
-        chi_par = float(params["alpha_pol"]) + float(params["alpha0_rot"]) * chi_par
-        chi_perp = float(params["alpha_pol"]) + float(params["alpha0_rot"]) * chi_perp
-        chi_par = float(params["N_MOL"]) * s_diel / (1.0 / chi_par - float(params["invalpha_sic"]))
-        chi_perp = float(params["N_MOL"]) * s_diel / (1.0 / chi_perp - float(params["invalpha_sic"]))
-        inv_e2 = np.zeros_like(phi)
-        nz = emag >= 2.0e-4 / max(float(params["PBETA"]), 1.0e-300)
-        inv_e2[nz] = 1.0 / (emag[nz] ** 2)
-        chi_factor = (chi_par - chi_perp) * inv_e2
-        response = ("tensor_field", chi_perp, chi_factor, ex, ey, ez)
-    else:
-        alpha = float(params["alpha0_rot"]) + float(params["alpha_pol"])
-        scalar = float(params["N_MOL"]) * s_diel / (1.0 / alpha - float(params["invalpha_sic"]))
-        response = ("scalar", scalar)
-    _add_timing("nlpb_response", perf_counter() - t)
-    _add_timing("nlpb_total_response", perf_counter() - t_all)
-    return n_b_values, n_ion_values, response, ekappa2, w_b
+        return fields["n_b"], fields["n_ion"], None, None, w_b
+    response, ekappa2 = nlpb_response_from_fields(fields, s_ion, s_diel, grid, params)
+    return fields["n_b"], fields["n_ion"], response, ekappa2, w_b
 
 
 def minimize_l(
@@ -552,44 +669,65 @@ def minimize_l(
     precond = np.zeros(grid.shape, dtype=float)
     mask = gsq > 0.0
     precond[mask] = EDEPS / (TPI**2 * gsq[mask]) / grid.volume
+    rm = _fused("rmulc")
+    xpb = _fused("cxpby")
+    axpy = _fused("caxpy")
+    dpf = _fused("dprod_rc")
+
+    def _zmul(rr):
+        return rm(precond, rr) if rm is not None else precond * rr
+
+    def _dot(a, b):
+        return dpf(a, b) if dpf is not None else dprod_rc(a, b)
+
     dphi = np.zeros(grid.shape, dtype=complex)
-    r = resid_g.copy()
-    z = precond * r
+    r = np.ascontiguousarray(resid_g).copy()
+    z = _zmul(r)
     lp0 = None
     lambda0 = 0.0
     if ekappa2 is not None:
-        lp0 = grid.fft(ekappa2) * grid.volume / EDEPS
+        lp0 = np.ascontiguousarray(grid.fft(ekappa2) * grid.volume / EDEPS)
         lambda0 = get_g0(lp0)
         r0 = get_g0(r)
         if abs(lambda0) > 0.0:
             alpha0 = r0 / lambda0
             set_g0(dphi, alpha0)
-            r = r - alpha0 * lp0
-            z = precond * r
+            if axpy is not None:
+                axpy(r, lp0, -alpha0)
+            else:
+                r = r - alpha0 * lp0
+            z = _zmul(r)
     p = None
     rmr_old = 0.0
-    rms = float(np.sqrt(max(dprod_rc(z, z), 0.0)))
+    rms = float(np.sqrt(max(_dot(z, z), 0.0)))
     for iteration in range(1, max_iter + 1):
-        rmr = dprod_rc(r, z)
+        rmr = _dot(r, z)
         if p is None:
             p = z.copy()
+        elif xpb is not None:
+            beta = rmr / rmr_old if rmr_old != 0.0 else 0.0
+            xpb(p, z, beta)
         else:
             beta = rmr / rmr_old if rmr_old != 0.0 else 0.0
             p = z + beta * p
         if lp0 is not None:
             if abs(lambda0) > 0.0:
-                lam = dprod_rc(z, lp0)
+                lam = _dot(z, lp0)
                 p0 = get_g0(p) - lam / lambda0
                 set_g0(p, p0)
         lp = l_op(p, response, ekappa2, w_b, grid)
-        plp = dprod_rc(p, lp)
+        plp = _dot(p, lp)
         if plp == 0.0:
             break
         alpha = rmr / plp
-        dphi = dphi + alpha * p
-        r = r - alpha * lp
-        z = precond * r
-        rms = float(np.sqrt(max(dprod_rc(z, z), 0.0)))
+        if axpy is not None:
+            axpy(dphi, p, alpha)
+            axpy(r, lp, -alpha)
+        else:
+            dphi = dphi + alpha * p
+            r = r - alpha * lp
+        z = _zmul(r)
+        rms = float(np.sqrt(max(_dot(z, z), 0.0)))
         if rms <= tol and iteration >= 4:
             _add_timing("minimize_l_total", perf_counter() - t_all)
             return dphi, rms, iteration

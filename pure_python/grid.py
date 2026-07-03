@@ -7,6 +7,11 @@ import os
 import numpy as np
 
 try:
+    from . import _pb_fast
+except Exception:  # pragma: no cover - optional acceleration extension.
+    _pb_fast = None
+
+try:
     from scipy import fft as scipy_fft
 except Exception:  # pragma: no cover - NumPy fallback for minimal environments.
     scipy_fft = None
@@ -50,6 +55,14 @@ def _fft_backend() -> str:
     return os.environ.get("PB_FFT_BACKEND", "scipy").strip().lower()
 
 
+def fused_kernel(name: str):
+    if _pb_fast is None:
+        return None
+    if os.environ.get("PB_DISABLE_FUSED", "0") not in ("", "0", "false", "False"):
+        return None
+    return getattr(_pb_fast, name, None)
+
+
 @dataclass(frozen=True)
 class Grid:
     cell: np.ndarray
@@ -86,18 +99,22 @@ class Grid:
         return np.fft.fftn(real_values) / self.ngrid
 
     def ifft_real(self, recip_values: np.ndarray) -> np.ndarray:
-        # Inverse of the normalized convention above.
+        # Inverse of the normalized convention above. Returns a contiguous
+        # array (the .real of a complex ifft is a strided view, which the
+        # fused C kernels cannot accept).
         if _fft_backend() == "mkl" and mkl_fft is not None:
-            return mkl_fft.ifftn(recip_values * self.ngrid).real
+            return np.ascontiguousarray(mkl_fft.ifftn(recip_values * self.ngrid).real)
         if _fft_backend() == "pyfftw" and pyfftw_fft is not None:
-            return pyfftw_fft.ifftn(
-                recip_values * self.ngrid,
-                threads=_fft_workers(),
-                planner_effort="FFTW_ESTIMATE",
-            ).real
+            return np.ascontiguousarray(
+                pyfftw_fft.ifftn(
+                    recip_values * self.ngrid,
+                    threads=_fft_workers(),
+                    planner_effort="FFTW_ESTIMATE",
+                ).real
+            )
         if scipy_fft is not None:
-            return scipy_fft.ifftn(recip_values * self.ngrid, workers=_fft_workers()).real
-        return np.fft.ifftn(recip_values * self.ngrid).real
+            return np.ascontiguousarray(scipy_fft.ifftn(recip_values * self.ngrid, workers=_fft_workers()).real)
+        return np.ascontiguousarray(np.fft.ifftn(recip_values * self.ngrid).real)
 
     def fractional_mesh(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         nx, ny, nz = self.shape
@@ -152,6 +169,15 @@ class Grid:
 
     def grad_from_recip(self, phi_g: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         gx, gy, gz, _ = self.reciprocal_mesh()
+        premul = fused_kernel("grad_premul")
+        mag3 = fused_kernel("magnitude3")
+        if premul is not None and mag3 is not None:
+            ax, ay, az = premul(gx, gy, gz, np.ascontiguousarray(phi_g))
+            ex = self.ifft_real(ax)
+            ey = self.ifft_real(ay)
+            ez = self.ifft_real(az)
+            mag = mag3(ex, ey, ez)
+            return ex, ey, ez, mag
         ex = self.ifft_real(1j * TPI * gx * phi_g)
         ey = self.ifft_real(1j * TPI * gy * phi_g)
         ez = self.ifft_real(1j * TPI * gz * phi_g)
@@ -160,6 +186,14 @@ class Grid:
 
     def div_real_vector(self, vx: np.ndarray, vy: np.ndarray, vz: np.ndarray) -> np.ndarray:
         gx, gy, gz, _ = self.reciprocal_mesh()
+        acc = fused_kernel("div_accum")
+        if acc is not None:
+            out = np.zeros(self.shape, dtype=complex)
+            f0 = np.ascontiguousarray(self.fft(vx))
+            f1 = np.ascontiguousarray(self.fft(vy))
+            f2 = np.ascontiguousarray(self.fft(vz))
+            acc(out, gx, gy, gz, f0, f1, f2)
+            return out
         return 1j * TPI * (
             gx * self.fft(vx)
             + gy * self.fft(vy)

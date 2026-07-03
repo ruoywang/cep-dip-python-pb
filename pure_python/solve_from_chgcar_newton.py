@@ -23,7 +23,8 @@ from .pb import (
     derived_params,
     get_pb_timing,
     minimize_l,
-    nlpb_quantities,
+    nlpb_field_quantities,
+    nlpb_response_from_fields,
     reset_pb_timing,
     residual_g,
 )
@@ -52,43 +53,42 @@ def solve_nlpb_for_phi_sol(
     phi_solv_g = grid.fft(phi_total - phi_sol)
     w_b = normalized_gaussian_kernel_g(grid, float(params["R_B"]) if float(params["R_B"]) > 0.0 else float(params["A_K"]))
     history: list[tuple[int, float, int, float]] = []
-    n_b = np.zeros(grid.shape)
-    n_ion = np.zeros(grid.shape)
+    fields = None
     for outer in range(max_outer + 1):
-        n_b, n_ion, response, ekappa2, _ = nlpb_quantities(phi_total, s_ion, s_diel, grid, params, w_b=w_b)
-        if response is None:
-            raise RuntimeError("Newton solve requires dielectric response")
+        if fields is None:
+            fields = nlpb_field_quantities(phi_total, s_ion, s_diel, grid, params, w_b)
+        n_b = fields["n_b"]
+        n_ion = fields["n_ion"]
         resid, rms = residual_g(phi_solv_g, n_b, n_ion, q_sol, grid)
         if rms < tol and outer >= 1:
             history.append((outer, rms, 0, 0.0))
             break
+        response, ekappa2 = nlpb_response_from_fields(fields, s_ion, s_diel, grid, params)
+        if response is None:
+            raise RuntimeError("Newton solve requires dielectric response")
         dphi_g, cg_rms, cg_iter = minimize_l(resid, response, ekappa2, w_b, grid, max(rms / 10.0, tol), cg_max_iter)
         dphi_real = grid.ifft_real(dphi_g)
         alpha = 1.0
-        accepted_phi = phi_total
-        accepted_phi_solv_g = phi_solv_g
         accepted_rms = float("inf")
         for _ in range(7):
             trial_phi = phi_total + alpha * dphi_real
             trial_phi_solv_g = phi_solv_g + alpha * dphi_g
-            trial_b, trial_ion, _, _, _ = nlpb_quantities(
-                trial_phi, s_ion, s_diel, grid, params, w_b=w_b, need_response=False
-            )
-            _, trial_rms = residual_g(trial_phi_solv_g, trial_b, trial_ion, q_sol, grid)
+            trial_fields = nlpb_field_quantities(trial_phi, s_ion, s_diel, grid, params, w_b)
+            _, trial_rms = residual_g(trial_phi_solv_g, trial_fields["n_b"], trial_fields["n_ion"], q_sol, grid)
             if trial_rms <= rms or alpha <= 1.0 / 64.0:
-                accepted_phi = trial_phi
-                accepted_phi_solv_g = trial_phi_solv_g
+                phi_total = trial_phi
+                phi_solv_g = trial_phi_solv_g
+                fields = trial_fields
                 accepted_rms = trial_rms
                 break
             alpha *= 0.5
-        phi_total = accepted_phi
-        phi_solv_g = accepted_phi_solv_g
         history.append((outer, rms, cg_iter, accepted_rms))
         if progress_path is not None:
             with progress_path.open("a") as f:
                 f.write(f"{fixstep}\t{outer}\t{rms:.12e}\t{cg_iter}\t{accepted_rms:.12e}\n")
-    n_b, n_ion, _, _, _ = nlpb_quantities(phi_total, s_ion, s_diel, grid, params, w_b=w_b, need_response=False)
-    return phi_total, n_b, n_ion, phi_solv_g, history
+    if fields is None:
+        fields = nlpb_field_quantities(phi_total, s_ion, s_diel, grid, params, w_b)
+    return phi_total, fields["n_b"], fields["n_ion"], phi_solv_g, history
 
 
 def main() -> None:
