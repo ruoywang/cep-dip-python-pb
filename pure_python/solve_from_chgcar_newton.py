@@ -36,6 +36,33 @@ def rmse(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.sqrt(np.mean((a - b) ** 2)))
 
 
+def restrict_half(a: np.ndarray) -> np.ndarray:
+    """Decimate a field onto the half-resolution grid (even shapes only)."""
+    return np.ascontiguousarray(a[::2, ::2, ::2])
+
+
+def prolong_double(a_coarse: np.ndarray, grid_c: Grid, grid_f: Grid) -> np.ndarray:
+    """Fourier zero-padding prolongation from the half grid to the full grid.
+
+    The normalized FFT convention stores amplitudes, so low-frequency
+    coefficients transfer unchanged.
+    """
+    spec_c = grid_c.fft(a_coarse)
+    spec_f = np.zeros(grid_f.shape, dtype=complex)
+    blocks = []
+    for n_c, n_f in zip(grid_c.shape, grid_f.shape):
+        h = n_c // 2
+        blocks.append((
+            (slice(0, h), slice(0, h)),
+            (slice(h, n_c), slice(n_f - (n_c - h), n_f)),
+        ))
+    for (cx, fx) in blocks[0]:
+        for (cy, fy) in blocks[1]:
+            for (cz, fz) in blocks[2]:
+                spec_f[fx, fy, fz] = spec_c[cx, cy, cz]
+    return grid_f.ifft_real(spec_f)
+
+
 def solve_nlpb_for_phi_sol(
     phi_total: np.ndarray,
     phi_sol: np.ndarray,
@@ -104,6 +131,8 @@ def main() -> None:
     parser.add_argument("--tol", type=float, default=1.0e-3)
     parser.add_argument("--max-outer", type=int, default=20)
     parser.add_argument("--cg-max-iter", type=int, default=200)
+    parser.add_argument("--coarse-init", type=int, default=1,
+                        help="warm-start fixstep 0 from a half-resolution Newton solve")
     args = parser.parse_args()
 
     out = Path(args.out_dir)
@@ -204,6 +233,26 @@ def main() -> None:
         progress_path.parent.mkdir(parents=True, exist_ok=True)
         if step == 0:
             progress_path.write_text("fixstep\touter\trms\tcg_iter\tpost_step_rms\n")
+        if step == 0 and args.coarse_init and all(n % 2 == 0 for n in grid.shape):
+            t_coarse = perf_counter()
+            grid_c = Grid(chg.cell, tuple(n // 2 for n in grid.shape))
+            phi_c, _, _, _, _ = solve_nlpb_for_phi_sol(
+                np.zeros(grid_c.shape),
+                restrict_half(phi_sol),
+                restrict_half(s_ion),
+                restrict_half(s_diel),
+                grid_c,
+                params,
+                cfg["q_sol"],
+                args.tol,
+                args.max_outer,
+                args.cg_max_iter,
+                progress_path,
+                -1,
+            )
+            phi_total = prolong_double(phi_c, grid_c, grid)
+            stage_lines.append(f"coarse_init\t{perf_counter() - t_coarse:.6f}")
+            (out / "stage_times.tsv").write_text("\n".join(stage_lines) + "\n")
         phi_total, n_b, n_ion, _, history = solve_nlpb_for_phi_sol(
             phi_total,
             phi_sol,
