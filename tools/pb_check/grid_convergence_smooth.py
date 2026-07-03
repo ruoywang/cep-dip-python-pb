@@ -118,13 +118,22 @@ def solve_smooth(shape, cell, pos_frac, zvals, params, q_sol, device, tol):
     dz = length_z / nz
     area = tg.volume / length_z
     rho = (n_ion / tg.volume).mean(dim=(0, 1)).detach().cpu().numpy()
+    rho_b = (n_b / tg.volume).mean(dim=(0, 1)).detach().cpu().numpy()
     z = np.arange(nz) * dz
     q_ion = float(rho.sum() * dz * area)
     denom = q_ion if abs(q_ion) > 1e-12 else 1e-12
     layer_mean = float((rho * z).sum() * dz * area / denom)
     pot = POTENTIAL_SCALE * (-q_ion * layer_mean) / area
-    return {"z": z, "rho": rho, "q_ion": q_ion, "layer_mean": layer_mean,
-            "pot": pot, "wall": wall, "rms": hist[-1][1], "height": length_z}
+    # bound-charge dipole (electron-units z-moment; physics = -mu)
+    mu_b = float((rho_b * z).sum() * dz * area)
+    pot_b = POTENTIAL_SCALE * (-mu_b) / area
+    # combined solvent term (what MACE consumes with include_bound)
+    mu_tot = float(((rho + rho_b) * z).sum() * dz * area)
+    pot_tot = POTENTIAL_SCALE * (-mu_tot) / area
+    return {"z": z, "rho": rho, "rho_b": rho_b, "q_ion": q_ion,
+            "layer_mean": layer_mean, "pot": pot, "mu_b": mu_b, "pot_b": pot_b,
+            "pot_tot": pot_tot, "wall": wall, "rms": hist[-1][1],
+            "height": length_z}
 
 
 def main():
@@ -149,7 +158,8 @@ def main():
     lengths = np.linalg.norm(cell, axis=1)
 
     rows = ["shape\tnpts\tspacing_A\twall_s\trms\tq_ion\tlayer_mean_A\t"
-            "dmean_A\tpot_V\tdpot_V\trho_rmse_vs_anchor"]
+            "dmean_A\tpot_ion_V\tdpot_ion_V\tpot_b_V\tdpot_b_V\t"
+            "pot_tot_V\tdpot_tot_V\trho_ion_rmse\trho_b_rmse"]
     anchor = None
     for sp in args.spacings:
         shape = tuple(fft_friendly_even(int(np.ceil(l / sp))) for l in lengths)
@@ -157,17 +167,24 @@ def main():
                          args.device, args.tol)
         if anchor is None:
             anchor = m
-            rr = 0.0
+            rr = rrb = 0.0
         else:
-            zs = np.concatenate([m["z"], [m["z"][0] + m["height"]]])
-            rs = np.concatenate([m["rho"], [m["rho"][0]]])
-            interp = np.interp(np.mod(anchor["z"], m["height"]), zs, rs)
-            rr = float(np.sqrt(np.mean((interp - anchor["rho"]) ** 2)))
+            def rmse_vs_anchor(vals):
+                zs = np.concatenate([m["z"], [m["z"][0] + m["height"]]])
+                rs = np.concatenate([vals, [vals[0]]])
+                interp = np.interp(np.mod(anchor["z"], m["height"]), zs, rs)
+                key = "rho" if vals is m["rho"] else "rho_b"
+                return float(np.sqrt(np.mean((interp - anchor[key]) ** 2)))
+            rr = rmse_vs_anchor(m["rho"])
+            rrb = rmse_vs_anchor(m["rho_b"])
         rows.append(
             f"{'x'.join(map(str, shape))}\t{int(np.prod(shape))}\t{sp:.2f}\t"
             f"{m['wall']:.2f}\t{m['rms']:.1e}\t{m['q_ion']:+.6f}\t"
             f"{m['layer_mean']:.4f}\t{m['layer_mean']-anchor['layer_mean']:+.4f}\t"
-            f"{m['pot']:+.4f}\t{m['pot']-anchor['pot']:+.4f}\t{rr:.3e}")
+            f"{m['pot']:+.4f}\t{m['pot']-anchor['pot']:+.4f}\t"
+            f"{m['pot_b']:+.4f}\t{m['pot_b']-anchor['pot_b']:+.4f}\t"
+            f"{m['pot_tot']:+.4f}\t{m['pot_tot']-anchor['pot_tot']:+.4f}\t"
+            f"{rr:.3e}\t{rrb:.3e}")
         print(rows[-1], flush=True)
     Path(args.out).write_text("\n".join(rows) + "\n")
     print(f"wrote {args.out}")
