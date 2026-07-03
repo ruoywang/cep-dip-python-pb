@@ -1,0 +1,8 @@
+repo:    /work/08384/tg876840/ls6/repos/cep-dip-python-pb
+commit:  23f36ca50e26014f8adb0247c26e329dc2c10ae6
+short:   23f36ca
+branch:  main
+pushed:  yes
+dirty:   0 file(s)
+date:    2026-07-02T20:36:43-05:00
+host:    c301-001.ls6.tacc.utexas.edu

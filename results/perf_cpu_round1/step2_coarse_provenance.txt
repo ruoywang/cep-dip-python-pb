@@ -1,0 +1,8 @@
+repo:    /work/08384/tg876840/ls6/repos/cep-dip-python-pb-perf
+commit:  9a10e35807fbf8082f66d1924283d56a40a5ed3f
+short:   9a10e35
+branch:  perf/cpu-fused-kernels
+pushed:  yes
+dirty:   0 file(s)
+date:    2026-07-02T20:52:55-05:00
+host:    c301-003.ls6.tacc.utexas.edu

@@ -1,0 +1,10 @@
+stage	seconds
+read_inputs	13.901104
+solute_potential_and_dencor	5.114135
+create_cavity	3.552412
+coarse_init	17.962720
+fixstep_0	59.440433
+fixstep_1	25.165160
+fixstep_2	9.724173
+fixstep_3	9.647739
+fixstep_4	11.734530
