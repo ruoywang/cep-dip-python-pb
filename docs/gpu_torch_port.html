@@ -220,9 +220,6 @@ const CONFIGS = [
   {name: "CPU · NumPy rfft", segs: [
     {k: "setup", v: 23.2}, {k: "coarse", v: 6.9}, {k: "fs0", v: 25.0},
     {k: "fs14", v: 26.0}, {k: "io", v: 0}], total: 81.1},
-  {name: "GPU · torch full", segs: [
-    {k: "setup", v: 21.3}, {k: "coarse", v: 35.8}, {k: "fs0", v: 38.9},
-    {k: "fs14", v: 6.2}, {k: "io", v: 27.8}], total: 130.0},
   {name: "GPU · torch rfft", segs: [
     {k: "setup", v: 21.7}, {k: "coarse", v: 20.2}, {k: "fs0", v: 23.1},
     {k: "fs14", v: 5.5}, {k: "io", v: 27.5}], total: 98.0},
@@ -249,9 +246,9 @@ function chart() {
   const M = {t: 6, r: 60, b: 26, l: 130};
   const H = M.t + CONFIGS.length * (barH + gap) + M.b;
   const svg = el("svg", {width: "100%", height: H, viewBox: `0 0 ${W} ${H}`}, box);
-  const vmax = 140;
+  const vmax = 110;
   const xs = v => M.l + v / vmax * (W - M.l - M.r);
-  for (let v = 0; v <= vmax; v += 20) {
+  for (let v = 0; v <= 100; v += 20) {
     el("line", {x1: xs(v), x2: xs(v), y1: M.t, y2: H - M.b, class: "gridline"}, svg);
     const t = el("text", {x: xs(v), y: H - M.b + 15, "text-anchor": "middle"}, svg);
     t.textContent = v;
