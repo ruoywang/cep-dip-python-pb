@@ -1,0 +1,292 @@
+<title>PB Solver GPU (torch) Port — Review</title>
+<style>
+  :root {
+    --plane: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink-2: #52514e;
+    --muted: #898781; --grid: #e1e0d9; --baseline: #c3c2b7;
+    --border: rgba(11,11,11,0.10);
+    --s1: #2a78d6; --s2: #1baf7a; --s3: #eda100; --s4: #4a3aa7; --s5: #e34948;
+    --good-text: #006300; --bad-text: #c0392b;
+    --mono: ui-monospace, "SF Mono", "Cascadia Mono", Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --plane: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink-2: #c3c2b7;
+      --muted: #898781; --grid: #2c2c2a; --baseline: #383835;
+      --border: rgba(255,255,255,0.10);
+      --s1: #3987e5; --s2: #199e70; --s3: #c98500; --s4: #9085e9; --s5: #e66767;
+      --good-text: #0ca30c; --bad-text: #e66767;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--plane); color: var(--ink);
+         font: 15px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 40px 24px 72px; }
+  .eyebrow { font-size: 12px; letter-spacing: .14em; text-transform: uppercase;
+             color: var(--muted); margin-bottom: 6px; }
+  h1 { font-size: 27px; line-height: 1.3; margin: 0 0 10px; text-wrap: balance; }
+  .lede { color: var(--ink-2); max-width: 68ch; margin: 0; }
+  section { margin-top: 44px; }
+  h2 { font-size: 19px; margin: 0 0 4px; }
+  .sub { color: var(--ink-2); font-size: 14px; margin: 0 0 16px; max-width: 78ch; }
+  .card { background: var(--surface); border: 1px solid var(--border);
+          border-radius: 6px; padding: 18px 20px; }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  @media (max-width: 860px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+  .tile .label { font-size: 12.5px; color: var(--ink-2); margin-bottom: 6px; }
+  .tile .value { font-size: 23px; font-weight: 650; line-height: 1.15; }
+  .tile .value small { font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 2px; }
+  .tile .note { font-size: 12px; color: var(--muted); margin-top: 5px; }
+  .tile .value.win { color: var(--good-text); }
+  .tile .value.flat { color: var(--ink); }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12.5px;
+            color: var(--ink-2); margin: 2px 0 12px; }
+  .legend .it { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .sw { width: 12px; height: 10px; border-radius: 2px; }
+  svg text { font: 11px var(--mono); fill: var(--muted); }
+  svg .axisline { stroke: var(--baseline); stroke-width: 1; }
+  svg .gridline { stroke: var(--grid); stroke-width: 1; }
+  .chartbox { position: relative; }
+  .tooltip { position: absolute; pointer-events: none; display: none; z-index: 3;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 5px;
+    box-shadow: 0 2px 10px rgba(0,0,0,.12);
+    padding: 7px 10px; font: 12px var(--mono); line-height: 1.5; white-space: nowrap; }
+  .tooltip .t { color: var(--muted); }
+  .tablewrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 14px 8px 0; border-bottom: 1px solid var(--grid);
+           vertical-align: top; }
+  th { font-size: 12px; letter-spacing: .06em; text-transform: uppercase;
+       color: var(--muted); font-weight: 600; }
+  td.num, th.num { text-align: right; font-family: var(--mono);
+                   font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .pass { color: var(--good-text); font-weight: 600; }
+  .fail { color: var(--bad-text); font-weight: 600; }
+  .notebox { border-left: 3px solid var(--s3); padding: 12px 16px; margin-top: 16px;
+    background: color-mix(in srgb, var(--s3) 6%, var(--surface));
+    border-radius: 0 6px 6px 0; font-size: 13.5px; color: var(--ink-2); }
+  .notebox.good { border-left-color: var(--s2);
+    background: color-mix(in srgb, var(--s2) 6%, var(--surface)); }
+  .notebox b { color: var(--ink); }
+  ul.tech { color: var(--ink-2); font-size: 14px; padding-left: 20px; }
+  ul.tech li { margin-bottom: 8px; }
+  ul.tech b { color: var(--ink); }
+  code { font-family: var(--mono); font-size: 12.5px;
+         background: color-mix(in srgb, var(--ink) 5%, transparent);
+         padding: 1px 5px; border-radius: 4px; }
+  footer { margin-top: 56px; font-size: 12.5px; color: var(--muted); }
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Results review · branch torch-gpu · pushed, pending review</div>
+  <h1>PB Solver GPU (torch) Port — Correct, but Speed Is Workload-Dependent</h1>
+  <p class="lede">The nonlinear Poisson–Boltzmann Newton-PCG solver was translated
+  line-for-line from NumPy to torch so it can run on the same GPU as the MACE
+  training forward, with no host round-trip. It reproduces the NumPy result
+  bit-for-bit and passes every cal_18 accuracy gate in float64. On speed the
+  honest answer is nuanced: on a <b>single high-resolution cal_18 solve the GPU is
+  not faster than the optimized CPU solver</b> (one-time overhead dominates), but
+  its <b>steady-state per-step cost is ~4.7× lower</b>, and the training workload —
+  a ~18–29× smaller grid solved repeatedly from a warm state — is where that
+  per-step win is expected to compound. Same solver parameters throughout
+  (tol 1e-3, max-outer 12, cg-max-iter 40); all runs on one gpu-a100-dev node.</p>
+</header>
+
+<section>
+  <h2>Key Numbers</h2>
+  <div class="tiles">
+    <div class="card tile">
+      <div class="label">cal_18 full solve (wall)</div>
+      <div class="value flat">81 → 98<small>s</small></div>
+      <div class="note">CPU-numpy rfft vs GPU-torch rfft — GPU slower here</div>
+    </div>
+    <div class="card tile">
+      <div class="label">Steady-state fixstep (cal_18)</div>
+      <div class="value win">6.5 → 1.4<small>s/step</small></div>
+      <div class="note">4.7× — the training-relevant number</div>
+    </div>
+    <div class="card tile">
+      <div class="label">Training-grid warm solve (~0.3 Å)</div>
+      <div class="value win">~0.9<small>s</small></div>
+      <div class="note">GPU f64; torch-CPU ~7 s on the same grid</div>
+    </div>
+    <div class="card tile">
+      <div class="label">Accuracy (float64, rfft)</div>
+      <div class="value win">PASS<small>all gates</small></div>
+      <div class="note">reproduces NumPy to ~1e-9; float32 diverges</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Why a Single cal_18 Solve Isn't Faster on GPU</h2>
+  <p class="sub">Stage-stacked wall time on the 168×168×384 (≈10.8 M point) cal_18
+  grid, half-spectrum, float64. The GPU shrinks the steady fixsteps 1–4 dramatically,
+  but cal_18 runs only <i>four</i> of them, while the one-time cost — CPU-side setup
+  (shared by both), the coarse warm start, fixstep 0, and torch/cuFFT initialization —
+  dominates the wall clock. There are simply not enough steady steps for the per-step
+  win to pay back the fixed overhead.</p>
+  <div class="card">
+    <div class="legend" id="leg"></div>
+    <div class="chartbox" id="chart"></div>
+    <div class="notebox"><b>Read it this way:</b> compare the green
+    (fixsteps 1–4) segments — the GPU bars are a sliver where the CPU bar is wide.
+    That is the real speedup. The dark one-time segments (coarse + fixstep 0 +
+    init/I/O) are what a single solve pays once; training amortizes them across
+    thousands of solves.</div>
+  </div>
+</section>
+
+<section>
+  <h2>Accuracy Gate (cal_18, final fixstep, float64 half-spectrum)</h2>
+  <p class="sub">The torch solver takes the same Newton path as the NumPy
+  half-spectrum production run and lands on its best-known values. Component-level
+  parity (every operator, both spectra) agrees with NumPy to ≤ 2.9×10⁻¹³.</p>
+  <div class="card">
+    <div class="tablewrap"><table>
+      <thead><tr><th>Quantity</th><th class="num">torch GPU f64</th>
+        <th class="num">gate (NumPy best)</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td>PHI 3D RMSE / eV</td><td class="num">2.997378e-3</td><td class="num">≤ 2.998e-3</td><td class="pass">PASS</td></tr>
+        <tr><td>PHI 1D RMSE / eV</td><td class="num">2.362971e-4</td><td class="num">≤ 2.364e-4</td><td class="pass">PASS</td></tr>
+        <tr><td>RHOB 1D / e·Å⁻³</td><td class="num">2.237948e-6</td><td class="num">≤ 2.238e-6</td><td class="pass">PASS</td></tr>
+        <tr><td>RHOION 1D / e·Å⁻³</td><td class="num">6.847208e-8</td><td class="num">≤ 6.848e-8</td><td class="pass">PASS</td></tr>
+      </tbody>
+    </table></div>
+    <div class="notebox"><b>float32 diverges.</b> The PB linear operator is
+    ill-conditioned (the Poisson g² spectrum spans a wide dynamic range); in float32
+    the preconditioned CG cannot reach the 1e-3 tolerance and the outer loop hits its
+    cap at NaN. Production must use float64. On the A100 (FP64:FP32 = 1:2) a working
+    mixed-precision path would cap at ~2× — the same as the rfft win, but far riskier —
+    so it is deferred.</div>
+  </div>
+</section>
+
+<section>
+  <h2>CPU vs GPU — What Actually Differs</h2>
+  <div class="card">
+    <ul class="tech">
+      <li><b>Same math, different backend.</b> <code>pure_python/torch_pb.py</code>
+      mirrors <code>grid.py</code> + <code>pb.py</code> operator-for-operator: the FFT
+      amplitude convention, reciprocal/derivative meshes, cavity construction, ion and
+      bound-charge densities, the scalar and tensor-field dielectric response,
+      <code>l_op</code>, and the CG inner loop. Both full- and half-spectrum are
+      supported (<code>TorchGrid(rspec=…)</code>), each matching NumPy bit-for-bit.</li>
+      <li><b>Where GPU wins: the steady solve.</b> Once torch/cuFFT plans are warm,
+      each Newton+CG fixstep is FFT- and elementwise-bound — exactly what the GPU does
+      well. cal_18 fixsteps 1–4: 6.5 s/step (CPU) → 1.4 s/step (GPU), 4.7×.</li>
+      <li><b>Where GPU loses on a single solve: fixed overhead.</b> ~22 s of setup
+      (CHGCAR + reference read, solute potential, cavity) runs on the CPU for both
+      backends; torch adds a one-time CUDA context + cuFFT plan build; and cal_18's
+      coarse-init + fixstep 0 carry the bulk of the Newton iterations. Four steady
+      steps can't amortize that.</li>
+      <li><b>Why training is the favorable case.</b> Training solves a
+      model-reconstructed density on a coarse grid (≈0.3 Å, ~0.4–0.6 M points vs
+      cal_18's 10.8 M) repeatedly; the CUDA context initializes once for the whole run,
+      and every structure is a warm steady solve. That is the regime the 4.7×
+      per-step number lives in.</li>
+    </ul>
+  </div>
+</section>
+
+<section>
+  <h2>Honest Conclusion &amp; Next Step</h2>
+  <div class="card">
+    <div class="notebox good"><b>The GPU port is correct and the steady-state is
+    faster, but net training benefit is not yet proven.</b> The 4.7× steady-step and
+    ~0.9 s training-grid figures are measured against <i>torch on CPU</i> and against
+    cal_18's own fixsteps — not against a full training loop using the optimized
+    NumPy+C solver. The decisive test is an A/B of two complete training paths
+    (existing NumPy-CPU <code>pb_solvent</code> vs the new torch-GPU backend,
+    device-resident, warm-started) measuring real s/step at ~0.3 Å. Until that number
+    is in, "GPU is worth it for training" stays a well-supported expectation, not a
+    fact. A grid-convergence study (how coarse a grid still reproduces the reference
+    ρ_ion(z)) should fix the spacing first — a coarser grid makes the steady-state win
+    even purer.</div>
+  </div>
+</section>
+
+<footer>
+  Runs: /scratch/…/c-MACEsol/3-torch-pb-cal18/{results_numpy, results_torch_gpu_f64,
+  results_rfft} · branch torch-gpu (pushed) · gpu-a100-dev · 2026-07-03 ·
+  component parity: tests/test_torch_pb_components.py
+</footer>
+</div>
+
+<script>
+// cal_18 stage-stacked wall time (seconds). io = torch/cuFFT init + per-fixstep
+// RMSE/profile I/O (one-time / not present in training).
+const CONFIGS = [
+  {name: "CPU · NumPy rfft", segs: [
+    {k: "setup", v: 23.2}, {k: "coarse", v: 6.9}, {k: "fs0", v: 25.0},
+    {k: "fs14", v: 26.0}, {k: "io", v: 0}], total: 81.1},
+  {name: "GPU · torch full", segs: [
+    {k: "setup", v: 21.3}, {k: "coarse", v: 35.8}, {k: "fs0", v: 38.9},
+    {k: "fs14", v: 6.2}, {k: "io", v: 27.8}], total: 130.0},
+  {name: "GPU · torch rfft", segs: [
+    {k: "setup", v: 21.7}, {k: "coarse", v: 20.2}, {k: "fs0", v: 23.1},
+    {k: "fs14", v: 5.5}, {k: "io", v: 27.5}], total: 98.0},
+];
+const SEGMETA = {
+  setup:  {label: "Setup (read + solute + cavity, CPU)", color: "var(--s4)"},
+  coarse: {label: "Coarse warm start", color: "var(--s3)"},
+  fs0:    {label: "PB fixstep 0", color: "var(--s1)"},
+  fs14:   {label: "PB fixsteps 1–4 (steady)", color: "var(--s2)"},
+  io:     {label: "torch/cuFFT init + RMSE I/O (one-time)", color: "var(--s5)"},
+};
+const NS = "http://www.w3.org/2000/svg";
+function el(t, a, p) { const e = document.createElementNS(NS, t);
+  for (const k in a) e.setAttribute(k, a[k]); if (p) p.appendChild(e); return e; }
+function legend() {
+  document.getElementById("leg").innerHTML = Object.values(SEGMETA).map(m =>
+    `<span class="it"><span class="sw" style="background:${m.color}"></span>${m.label}</span>`).join("");
+}
+function chart() {
+  const box = document.getElementById("chart");
+  box.querySelectorAll("svg").forEach(s => s.remove());
+  const W = box.clientWidth || 1000;
+  const barH = 30, gap = 22;
+  const M = {t: 6, r: 60, b: 26, l: 130};
+  const H = M.t + CONFIGS.length * (barH + gap) + M.b;
+  const svg = el("svg", {width: "100%", height: H, viewBox: `0 0 ${W} ${H}`}, box);
+  const vmax = 140;
+  const xs = v => M.l + v / vmax * (W - M.l - M.r);
+  for (let v = 0; v <= vmax; v += 20) {
+    el("line", {x1: xs(v), x2: xs(v), y1: M.t, y2: H - M.b, class: "gridline"}, svg);
+    const t = el("text", {x: xs(v), y: H - M.b + 15, "text-anchor": "middle"}, svg);
+    t.textContent = v;
+  }
+  const xl = el("text", {x: (M.l + W - M.r) / 2, y: H - 2, "text-anchor": "middle"}, svg);
+  xl.textContent = "cal_18 wall time / s";
+  el("line", {x1: xs(0), x2: xs(0), y1: M.t, y2: H - M.b, class: "axisline"}, svg);
+  const tip = document.createElement("div"); tip.className = "tooltip"; box.appendChild(tip);
+  CONFIGS.forEach((c, i) => {
+    const y = M.t + i * (barH + gap);
+    const lb = el("text", {x: M.l - 8, y: y + barH / 2 + 4, "text-anchor": "end",
+      style: "fill:var(--ink-2);font-size:12px"}, svg);
+    lb.textContent = c.name;
+    let acc = 0;
+    c.segs.forEach(seg => {
+      if (seg.v <= 0) return;
+      const x0 = xs(acc), x1 = xs(acc + seg.v);
+      const r = el("rect", {x: x0, y, width: Math.max(x1 - x0 - 2, 1), height: barH,
+        fill: SEGMETA[seg.k].color, rx: 2}, svg);
+      r.addEventListener("mousemove", ev => {
+        const b = box.getBoundingClientRect();
+        tip.innerHTML = `<span class="t">${c.name}</span><br>${SEGMETA[seg.k].label} · ${seg.v.toFixed(1)} s`;
+        tip.style.display = "block";
+        tip.style.left = Math.min(ev.clientX - b.left + 14, box.clientWidth - tip.offsetWidth - 4) + "px";
+        tip.style.top = Math.max(ev.clientY - b.top - tip.offsetHeight - 10, 2) + "px";
+      });
+      r.addEventListener("mouseleave", () => tip.style.display = "none");
+      acc += seg.v;
+    });
+    const vt = el("text", {x: xs(acc) + 8, y: y + barH / 2 + 4,
+      style: "fill:var(--ink);font-weight:600"}, svg);
+    vt.textContent = c.total.toFixed(0) + " s";
+  });
+}
+legend();
+chart();
+let rz; addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(chart, 160); });
+</script>

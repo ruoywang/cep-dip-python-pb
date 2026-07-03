@@ -45,6 +45,15 @@
   solvent-field reproduction project. Newest first. Source data lives in
   the repository's <span style="font-family:var(--mono)">results/</span> directory.</p>
 
+  <a class="report" href="gpu_torch_port.html">
+    <div class="date">2026-07-03<span class="tag">gpu port</span></div>
+    <h2>PB Solver GPU (torch) Port — Correct, Speed Is Workload-Dependent</h2>
+    <p>Line-for-line torch translation of the Newton-PCG solver. Reproduces
+    NumPy bit-for-bit and passes every cal_18 gate in float64. On a single
+    high-res solve the GPU is not faster (one-time overhead dominates), but the
+    steady per-step cost is 4.7× lower — training is the favorable regime.</p>
+  </a>
+
   <a class="report" href="perf_cpu_round1.html">
     <div class="date">2026-07-02<span class="tag">performance</span></div>
     <h2>PB Solver CPU Optimization — 383 s → 81 s (4.7×)</h2>
