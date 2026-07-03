@@ -1,7 +1,7 @@
 # cep-dip-python-pb
 
 
-**Results overview:** https://ruoywang.github.io/cep-dip-python-pb/
+**Reports:** https://ruoywang.github.io/cep-dip-python-pb/ (validation overview, performance rounds)
 
 Reproduction of VASP/CEP-DIP implicit-solvent fields (PHI / RHOB / RHOION)
 from a converged charge density (CHGCAR), validated in two independent routes:
