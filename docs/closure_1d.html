@@ -1,0 +1,516 @@
+<title>The 1-D closure route — tests, theory, and where it lands</title>
+<style>
+:root{
+  --paper:#f8f9fa; --card:#ffffff; --ink:#182230; --ink2:#4d5a68; --muted:#8a94a0;
+  --accent:#2a78d6; --accent-ink:#1e5ea8; --hair:#dde3e9; --code-bg:#eef2f6; --good:#0a7a33;
+  --s2:#1baf7a; --s3:#eda100;
+}
+@media (prefers-color-scheme: dark){
+  :root{ --paper:#14181d; --card:#1b2129; --ink:#e8ecf1; --ink2:#a6b0bc; --muted:#717c89;
+    --accent:#3987e5; --accent-ink:#6aa6ee; --hair:#2a323d; --code-bg:#222a35; --good:#4bbf72; --s2:#199e70; --s3:#c98500; }
+}
+:root[data-theme="dark"]{ --paper:#14181d; --card:#1b2129; --ink:#e8ecf1; --ink2:#a6b0bc; --muted:#717c89;
+  --accent:#3987e5; --accent-ink:#6aa6ee; --hair:#2a323d; --code-bg:#222a35; --good:#4bbf72; --s2:#199e70; --s3:#c98500; }
+:root[data-theme="light"]{ --paper:#f8f9fa; --card:#ffffff; --ink:#182230; --ink2:#4d5a68; --muted:#8a94a0;
+  --accent:#2a78d6; --accent-ink:#1e5ea8; --hair:#dde3e9; --code-bg:#eef2f6; --good:#0a7a33; --s2:#1baf7a; --s3:#eda100; }
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);
+  font:17px/1.65 Charter,"Bitstream Charter",Georgia,Cambria,serif;}
+.wrap{max-width:960px;margin:0 auto;padding:0 24px 96px}
+.topbar{display:flex;align-items:baseline;gap:12px;padding:18px 0;border-bottom:1px solid var(--hair);
+  font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;font-size:13px;color:var(--ink2)}
+.topbar .series{letter-spacing:.08em;text-transform:uppercase;font-weight:600}
+.badge{margin-left:auto;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  border:1px solid var(--hair);border-radius:3px;padding:2px 8px;color:var(--muted)}
+h1{font-family:-apple-system,"Segoe UI",Roboto,sans-serif;font-size:34px;line-height:1.2;font-weight:650;
+  letter-spacing:-.01em;margin:40px 0 10px;text-wrap:balance}
+.dek{font-size:19px;color:var(--ink2);max-width:68ch;margin:0 0 26px}
+h2{font-family:-apple-system,"Segoe UI",Roboto,sans-serif;font-size:21px;font-weight:650;margin:52px 0 12px;text-wrap:balance}
+h2 .no{color:var(--accent);font-variant-numeric:tabular-nums;margin-right:10px}
+p{max-width:68ch;margin:0 0 14px}
+code{font-family:ui-monospace,"SF Mono","Cascadia Code",Menlo,Consolas,monospace;font-size:.86em;
+  background:var(--code-bg);border-radius:3px;padding:1px 5px}
+var{font-style:italic;font-family:Charter,Georgia,serif}
+.eq{background:var(--card);border:1px solid var(--hair);border-radius:6px;
+  padding:12px 20px;margin:16px 0;max-width:680px;overflow-x:auto}
+.eq math{font-size:1.16rem;margin:6px 0}
+.eq math[display="block"]{margin:8px 0}
+.eq .lbl{float:right;color:var(--muted);font-size:13px;font-family:-apple-system,"Segoe UI",Roboto,sans-serif}
+.eq sub,.eq sup{font-size:.68em}
+.tblwrap{overflow-x:auto;margin:18px 0}
+table{border-collapse:collapse;font-family:-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14px;min-width:560px}
+th{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);font-weight:600;
+  text-align:left;padding:8px 14px 6px 0;border-bottom:1px solid var(--hair)}
+td{padding:8px 14px 8px 0;border-bottom:1px solid var(--hair)}
+td.num,th.num{text-align:right;font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  font-variant-numeric:tabular-nums;font-size:13.5px}
+td.hl{color:var(--accent-ink);font-weight:600}
+.fig{background:var(--card);border:1px solid var(--hair);border-radius:6px;padding:20px;margin:20px 0;position:relative}
+.fig .cap{font-family:-apple-system,"Segoe UI",Roboto,sans-serif;font-size:13px;color:var(--ink2);margin-top:10px;max-width:78ch}
+.panel-title{font-family:-apple-system,"Segoe UI",Roboto,sans-serif;font-size:13px;font-weight:600;
+  color:var(--ink2);margin:10px 0 2px}
+.note{border-left:3px solid var(--accent);padding:2px 0 2px 16px;color:var(--ink2);margin:18px 0;max-width:66ch}
+ul,ol{max-width:68ch;padding-left:22px} li{margin-bottom:7px}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-family:-apple-system,"Segoe UI",Roboto,sans-serif;font-size:12.5px;color:var(--ink2);margin:0 0 8px}
+.legend span{display:flex;align-items:center;gap:6px}
+.legend i{width:14px;height:3px;border-radius:2px;display:inline-block}
+.footer{margin-top:64px;padding-top:16px;border-top:1px solid var(--hair);
+  font-family:-apple-system,"Segoe UI",Roboto,sans-serif;font-size:13px;color:var(--muted)}
+a{color:var(--accent-ink)} a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.d-lab{font-family:-apple-system,"Segoe UI",Roboto,sans-serif;font-size:12.5px;fill:var(--ink2)}
+.d-mono{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11.5px;fill:var(--ink)}
+</style>
+<div class="wrap">
+  <div class="topbar"><span class="series">cep-dip-python-pb · solver reports</span>
+    <a class="badge" href="./index.html" style="text-decoration:none;color:var(--muted)">← Reports index</a></div>
+
+  <h1>The 1-D closure route: theory, tests, and where it lands</h1>
+  <p class="dek">Everything measured about replacing the per-structure 3-D nonlinear PB solve
+  with a plane-averaged 1-D solve: why the naive reduction fails by construction, the two
+  closure quantities that fix it, how accurately each must be known, and the resulting
+  architecture — a differentiable ~0.03 s solvent response for training and MD alike.</p>
+
+  <h2><span class="no">1</span>Theory: from VASPsol++ to the anchored 1-D closure</h2>
+  <p>Notation and equation numbers follow the VASPsol++ paper
+  (Islam, Khezeli, Ringe &amp; Plaisance, <em>J.&nbsp;Chem.&nbsp;Phys.</em> <strong>159</strong>,
+  234117 (2023)). ⟨·⟩ denotes the lateral (xy) plane average.</p>
+
+  <p><strong>(a) The 3-D model.</strong> Cavities are built from the solute electron density
+  n<sub>e</sub>(r) through the shape function [Eqs.&nbsp;(1)–(3)], chained into the dielectric
+  and ionic cavities S<sub>diel</sub>{n<sub>e</sub>}(r), S<sub>ion</sub>{n<sub>e</sub>}(r):</p>
+  <div class="eq"><span class="lbl">Eqs. (1)–(2)</span><math display="block"><mrow><mi>S</mi><mo stretchy="false">{</mo><mi>n</mi><mo stretchy="false">}</mo><mo stretchy="false">(</mo><mi mathvariant="bold">r</mi><mo stretchy="false">)</mo><mo>=</mo><mfrac><mn>1</mn><mn>2</mn></mfrac><mspace width="0.2em"/><mi>erfc</mi><mrow><mo>(</mo><mfrac><mrow><mi>ln</mi><mo stretchy="false">(</mo><mi>n</mi><mo>/</mo><msub><mi>n</mi><mtext>c</mtext></msub><mo stretchy="false">)</mo></mrow><mrow><mi>σ</mi><msqrt><mn>2</mn></msqrt></mrow></mfrac><mo>)</mo></mrow></mrow></math></div>
+  <p>The ground state solves the nonlinear Poisson–Boltzmann equation [Eq.&nbsp;(55)] with the
+  bound and ionic charges [Eqs.&nbsp;(56), (57)]:</p>
+  <div class="eq"><span class="lbl">Eqs. (55)–(57)</span><math display="block"><mrow><mo>−</mo><mfrac><msub><mi>ε</mi><mn>0</mn></msub><mrow><mn>4</mn><mi>π</mi></mrow></mfrac><msup><mo>∇</mo><mn>2</mn></msup><mi>φ</mi><mo>=</mo><msub><mi>ρ</mi><mtext>sol</mtext></msub><mo stretchy="false">(</mo><mi mathvariant="bold">r</mi><mo stretchy="false">)</mo><mo>+</mo><msub><mi>ρ</mi><mtext>b</mtext></msub><mo stretchy="false">{</mo><mi>φ</mi><mo stretchy="false">}</mo><mo>+</mo><msub><mi>ρ</mi><mtext>ion</mtext></msub><mo stretchy="false">{</mo><mi>φ</mi><mo stretchy="false">}</mo></mrow></math><math display="block"><mrow><msub><mi>ρ</mi><mtext>b</mtext></msub><mo>=</mo><mo>−</mo><msub><mi>n</mi><mtext>mol</mtext></msub><mrow><mo stretchy="false">(</mo><msub><mi>w</mi><mtext>b</mtext></msub><mo>∗</mo><mo>∇</mo><mo>·</mo><mo stretchy="false">(</mo><msub><mi>S</mi><mtext>diel</mtext></msub><mspace width="0.15em"/><mi mathvariant="bold">p</mi><mo stretchy="false">)</mo><mo stretchy="false">)</mo></mrow><mo>,</mo><mspace width="1.2em"/><msub><mi>ρ</mi><mtext>ion</mtext></msub><mo>=</mo><msub><mi>n</mi><mtext>max</mtext></msub><mspace width="0.15em"/><msub><mi>S</mi><mtext>ion</mtext></msub><mspace width="0.15em"/><msub><mover><mi>ρ</mi><mo>~</mo></mover><mtext>ion</mtext></msub></mrow></math></div>
+  <p>The molecular dipole <strong>p</strong> responds <em>locally and nonlinearly</em> to the
+  local field ℰ [Eqs.&nbsp;(27), (28), (32), (34)], and the ions are Boltzmann-like with
+  lattice saturation [Eqs.&nbsp;(51), (53)]:</p>
+  <div class="eq"><span class="lbl">Eqs. (27), (28)+(32), (34)</span><math display="block"><mrow><mi>ℰ</mi><mo>=</mo><mo>−</mo><mrow><mo stretchy="false">(</mo><msub><mi>w</mi><mtext>b</mtext></msub><mo>∗</mo><mo>∇</mo><mi>φ</mi><mo stretchy="false">)</mo></mrow><mo>+</mo><mfrac><mrow><mn>4</mn><mi>π</mi></mrow><mrow><msub><mi>ε</mi><mn>0</mn></msub><msub><mi>α</mi><mtext>sic</mtext></msub></mrow></mfrac><mspace width="0.15em"/><mi mathvariant="bold">p</mi></mrow></math><math display="block"><mrow><mi mathvariant="bold">p</mi><mo>=</mo><mfrac><msub><mi>ε</mi><mn>0</mn></msub><mrow><mn>4</mn><mi>π</mi></mrow></mfrac><mrow><mo stretchy="false">[</mo><msubsup><mi>α</mi><mtext>rot</mtext><mn>0</mn></msubsup><mspace width="0.15em"/><msub><mi>g</mi><mtext>rot</mtext></msub><mo stretchy="false">(</mo><mi>β</mi><msub><mi>p</mi><mtext>mol</mtext></msub><mi>ℰ</mi><mo stretchy="false">)</mo><mo>+</mo><msub><mi>α</mi><mtext>pol</mtext></msub><mo stretchy="false">]</mo></mrow><mspace width="0.15em"/><mi>ℰ</mi></mrow></math><math display="block"><mrow><msub><mi>g</mi><mtext>rot</mtext></msub><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mo>=</mo><mfrac><mn>3</mn><msup><mi>x</mi><mn>2</mn></msup></mfrac><mrow><mo stretchy="false">(</mo><mi>x</mi><mspace width="0.15em"/><mi>coth</mi><mspace width="0.15em"/><mi>x</mi><mo>−</mo><mn>1</mn><mo stretchy="false">)</mo></mrow></mrow></math></div>
+  <div class="eq"><span class="lbl">Eqs. (51), (53)</span><math display="block"><mrow><msub><mover><mi>ρ</mi><mo>~</mo></mover><mtext>ion</mtext></msub><mo>=</mo><mo>−</mo><mfrac><msub><mi>ε</mi><mn>0</mn></msub><mrow><mn>4</mn><mi>π</mi></mrow></mfrac><msubsup><mi>α</mi><mtext>ion</mtext><mtext>b</mtext></msubsup><mspace width="0.15em"/><msub><mi>g</mi><mtext>ion</mtext></msub><mo stretchy="false">(</mo><mi>β</mi><mi>z</mi><mi>φ</mi><mo stretchy="false">)</mo><mspace width="0.15em"/><mi>φ</mi></mrow></math><math display="block"><mrow><msub><mi>g</mi><mtext>ion</mtext></msub><mo stretchy="false">(</mo><mi>x</mi><mo stretchy="false">)</mo><mo>=</mo><mfrac><mn>1</mn><mi>x</mi></mfrac><mfrac><mrow><mi>sinh</mi><mspace width="0.15em"/><mi>x</mi></mrow><mrow><mn>1</mn><mo>−</mo><msubsup><mi>θ</mi><mtext>ion</mtext><mtext>b</mtext></msubsup><mo>+</mo><msubsup><mi>θ</mi><mtext>ion</mtext><mtext>b</mtext></msubsup><mspace width="0.15em"/><mi>cosh</mi><mspace width="0.15em"/><mi>x</mi></mrow></mfrac></mrow></math></div>
+  <p>Note what is <em>absent</em>: any offset. <strong>p</strong> vanishes wherever ℰ vanishes,
+  point by point — the constitutive law is local, universal, and needs no anchor, because the
+  lateral structure is fully resolved.</p>
+
+  <p><strong>(b) Exact reduction.</strong> Plane-averaging Eq.&nbsp;(55) is exact — lateral
+  derivatives average to zero by periodicity. With the polarization density
+  <strong>P</strong> ≡ n<sub>mol</sub>&hairsp;S<sub>diel</sub>&hairsp;<strong>p</strong>:</p>
+  <div class="eq"><span class="lbl">exact, ⟨Eq. (55)⟩</span><math display="block"><mrow><mo>−</mo><mfrac><msub><mi>ε</mi><mn>0</mn></msub><mrow><mn>4</mn><mi>π</mi></mrow></mfrac><mfrac><mrow><msup><mi>d</mi><mn>2</mn></msup><mo stretchy="false">⟨</mo><mi>φ</mi><mo stretchy="false">⟩</mo></mrow><mrow><mi>d</mi><msup><mi>z</mi><mn>2</mn></msup></mrow></mfrac><mo>=</mo><mo stretchy="false">⟨</mo><msub><mi>ρ</mi><mtext>sol</mtext></msub><mo stretchy="false">⟩</mo><mo>+</mo><mo stretchy="false">⟨</mo><msub><mi>ρ</mi><mtext>b</mtext></msub><mo stretchy="false">⟩</mo><mo>+</mo><mo stretchy="false">⟨</mo><msub><mi>ρ</mi><mtext>ion</mtext></msub><mo stretchy="false">⟩</mo></mrow></math><math display="block"><mrow><mo stretchy="false">⟨</mo><msub><mi>ρ</mi><mtext>b</mtext></msub><mo stretchy="false">⟩</mo><mo>=</mo><mo>−</mo><mfrac><mi>d</mi><mrow><mi>d</mi><mi>z</mi></mrow></mfrac><mrow><mo stretchy="false">(</mo><msub><mi>w</mi><mtext>b</mtext></msub><mo>∗</mo><mo stretchy="false">⟨</mo><msub><mi>P</mi><mi>z</mi></msub><mo stretchy="false">⟩</mo><mo stretchy="false">)</mo></mrow></mrow></math></div>
+  <p>Because ⟨ρ<sub>b</sub>⟩ is a total derivative of a periodic profile,
+  ∫⟨ρ<sub>b</sub>⟩dz = 0 identically — the bound-charge sum rule survives <em>any</em> closure
+  (verified to 10⁻¹⁶ for all methods in §3). What the reduction does <em>not</em> supply is
+  ⟨P<sub>z</sub>⟩(z) itself: that is the closure problem.</p>
+
+  <p><strong>(c) Why no dielectric function ε(z) exists.</strong> In the low-field limit
+  P<sub>z</sub>(r) = (ε₀/4π)&hairsp;χ(r)&hairsp;ℰ<sub>z</sub>(r) with
+  χ ≡ f<sub>loc</sub>&hairsp;n<sub>mol</sub>&hairsp;S<sub>diel</sub>(α⁰<sub>rot</sub>g<sub>rot</sub>+α<sub>pol</sub>)
+  (f<sub>loc</sub> = the local-field factor from eliminating the α<sub>sic</sub>
+  self-interaction, cf. Eq.&nbsp;(41)). Averaging the product splits identically:</p>
+  <div class="eq"><span class="lbl">covariance identity</span><math display="block"><mrow><mo stretchy="false">⟨</mo><msub><mi>P</mi><mi>z</mi></msub><mo stretchy="false">⟩</mo><mo>=</mo><mfrac><msub><mi>ε</mi><mn>0</mn></msub><mrow><mn>4</mn><mi>π</mi></mrow></mfrac><mrow><mo stretchy="false">[</mo><mo stretchy="false">⟨</mo><mi>χ</mi><mo stretchy="false">⟩</mo><mo stretchy="false">⟨</mo><msub><mi>ℰ</mi><mi>z</mi></msub><mo stretchy="false">⟩</mo><mo>+</mo><mo stretchy="false">⟨</mo><mi>δχ</mi><mo>·</mo><mi>δ</mi><msub><mi>ℰ</mi><mi>z</mi></msub><mo stretchy="false">⟩</mo><mo stretchy="false">]</mo></mrow><mo>,</mo><mspace width="1.2em"/><mi>δX</mi><mo>≡</mo><mi>X</mi><mo>−</mo><mo stretchy="false">⟨</mo><mi>X</mi><mo stretchy="false">⟩</mo></mrow></math></div>
+  <p>The covariance term is not multiplicative in ⟨ℰ<sub>z</sub>⟩: measured interface planes
+  have ⟨ℰ<sub>z</sub>⟩ = 0 with ⟨P<sub>z</sub>⟩ ≠ 0 (χ and ℰ are laterally correlated where
+  the cavity weaves around atoms), so <em>no</em> ε(z) can reproduce the averaged physics —
+  the 3-D law loses its offset-free form under coarse-graining.</p>
+
+  <p><strong>(d) The affine closure and the anchor.</strong> The effective 1-D constitutive
+  law therefore carries an inhomogeneous term:</p>
+  <div class="eq"><span class="lbl">affine closure</span><math display="block"><mrow><mo stretchy="false">⟨</mo><msub><mi>P</mi><mi>z</mi></msub><mo stretchy="false">⟩</mo><mo stretchy="false">(</mo><mi>z</mi><mo stretchy="false">)</mo><mo>=</mo><mi>A</mi><mo stretchy="false">(</mo><mi>z</mi><mo stretchy="false">)</mo><mspace width="0.15em"/><mo stretchy="false">⟨</mo><msub><mi>ℰ</mi><mi>z</mi></msub><mo stretchy="false">⟩</mo><mo stretchy="false">(</mo><mi>z</mi><mo stretchy="false">)</mo><mo>+</mo><msub><mi>P</mi><mtext>off</mtext></msub><mo stretchy="false">(</mo><mi>z</mi><mo stretchy="false">)</mo></mrow></math><math display="block"><mrow><mi>A</mi><mo stretchy="false">(</mo><mi>z</mi><mo stretchy="false">)</mo><mo>≡</mo><mfrac><msub><mi>ε</mi><mn>0</mn></msub><mrow><mn>4</mn><mi>π</mi></mrow></mfrac><msub><mi>f</mi><mtext>loc</mtext></msub><mspace width="0.15em"/><msub><mi>n</mi><mtext>mol</mtext></msub><mspace width="0.15em"/><mo stretchy="false">⟨</mo><msub><mi>S</mi><mtext>diel</mtext></msub><mo stretchy="false">⟩</mo><mo stretchy="false">(</mo><mi>z</mi><mo stretchy="false">)</mo><mrow><mo stretchy="false">(</mo><msubsup><mi>α</mi><mtext>rot</mtext><mn>0</mn></msubsup><mo>+</mo><msub><mi>α</mi><mtext>pol</mtext></msub><mo stretchy="false">)</mo></mrow></mrow></math>
+  <div style="font-family:-apple-system,'Segoe UI',Roboto,sans-serif;font-size:12.5px;color:var(--muted)">
+  zero-field formula; the bulk limit reproduces ε<sub>b</sub> [Eqs. (42)–(43)]</div></div>
+  <div class="eq"><span class="lbl">anchor</span><math display="block"><mrow><msub><mi>P</mi><mtext>off</mtext></msub><mo stretchy="false">(</mo><mi>z</mi><mo stretchy="false">)</mo><mo>≡</mo><msub><mrow><mo stretchy="false">⟨</mo><msub><mi>P</mi><mi>z</mi></msub><mo stretchy="false">⟩</mo></mrow><mtext>ref</mtext></msub><mo>−</mo><mi>A</mi><mo stretchy="false">(</mo><mi>z</mi><mo stretchy="false">)</mo><mspace width="0.15em"/><msub><mrow><mo stretchy="false">⟨</mo><msub><mi>ℰ</mi><mi>z</mi></msub><mo stretchy="false">⟩</mo></mrow><mtext>ref</mtext></msub></mrow></math>
+  <div style="font-family:-apple-system,'Segoe UI',Roboto,sans-serif;font-size:12.5px;color:var(--muted)">
+  anchor ≡ the pair (⟨ℰ<sub>z</sub>⟩<sub>ref</sub>, ⟨P<sub>z</sub>⟩<sub>ref</sub>) of one converged 3-D solution</div></div>
+  <p>Two consequences follow directly. <em>Anchor identity:</em> substituting back at the
+  reference state, A&hairsp;⟨ℰ⟩<sub>ref</sub> + P<sub>off</sub> = ⟨P⟩<sub>ref</sub> for
+  <em>any</em> A — the split between slope and offset is a convention at the anchor; changing
+  A merely reapportions P<sub>off</sub>. <em>Error structure:</em> away from the anchor,
+  ⟨P⟩ = ⟨P⟩<sub>ref</sub> + A·(⟨ℰ⟩−⟨ℰ⟩<sub>ref</sub>), so an anchor error is zeroth order
+  (a constant offset, measurable and refreshable) while a slope error enters only as
+  δA × δ⟨ℰ⟩ — first order in the deviation. This is why the learned/approximated content is
+  deliberately confined to P<sub>off</sub> and the response stays analytic.</p>
+
+  <p><strong>(e) Ion closure.</strong> The ionic channel keeps the full nonlinear form of
+  Eqs.&nbsp;(51), (53) evaluated at the averaged potential:</p>
+  <div class="eq"><span class="lbl">ion closure</span><math display="block"><mrow><mo stretchy="false">⟨</mo><msub><mi>ρ</mi><mtext>ion</mtext></msub><mo stretchy="false">⟩</mo><mo stretchy="false">(</mo><mi>z</mi><mo stretchy="false">)</mo><mo>=</mo><msub><mi>n</mi><mtext>max</mtext></msub><mspace width="0.15em"/><mo stretchy="false">⟨</mo><msub><mi>S</mi><mtext>ion</mtext></msub><mo stretchy="false">⟩</mo><mo stretchy="false">(</mo><mi>z</mi><mo stretchy="false">)</mo><mspace width="0.15em"/><msub><mover><mi>ρ</mi><mo>~</mo></mover><mtext>ion</mtext></msub><mo stretchy="false">(</mo><mo stretchy="false">⟨</mo><mi>φ</mi><mo stretchy="false">⟩</mo><mo stretchy="false">(</mo><mi>z</mi><mo stretchy="false">)</mo><mo stretchy="false">)</mo></mrow></math></div>
+  <p>This closure is benign — ions live where φ is laterally flat — and it never failed:
+  ρ<sub>ion</sub> errors are 10⁻⁵–10⁻⁶ e/Å³ in every variant including the naive one (§3).
+  The cavities ⟨S<sub>diel</sub>⟩, ⟨S<sub>ion</sub>⟩ must be built in 3-D from
+  n<sub>e</sub> and then averaged: the erfc/ln nonlinearity of Eqs.&nbsp;(1)–(2) does not
+  commute with averaging.</p>
+
+  <p><strong>(f) The 1-D equation actually solved</strong> (Newton iteration on 300–500
+  z-points, dipole-correction loop outside, ~0.03 s):</p>
+  <div class="eq"><span class="lbl">1-D PB</span><math display="block"><mrow><mo>−</mo><mfrac><msub><mi>ε</mi><mn>0</mn></msub><mrow><mn>4</mn><mi>π</mi></mrow></mfrac><mfrac><mrow><msup><mi>d</mi><mn>2</mn></msup><mo stretchy="false">⟨</mo><mi>φ</mi><mo stretchy="false">⟩</mo></mrow><mrow><mi>d</mi><msup><mi>z</mi><mn>2</mn></msup></mrow></mfrac><mo>=</mo><mo stretchy="false">⟨</mo><msub><mi>ρ</mi><mtext>sol</mtext></msub><mo stretchy="false">⟩</mo><mo>−</mo><mfrac><mi>d</mi><mrow><mi>d</mi><mi>z</mi></mrow></mfrac><mrow><mo stretchy="false">[</mo><msub><mi>w</mi><mtext>b</mtext></msub><mo>∗</mo><mrow><mo stretchy="false">(</mo><mi>A</mi><mspace width="0.15em"/><mo stretchy="false">⟨</mo><msub><mi>ℰ</mi><mi>z</mi></msub><mo stretchy="false">⟩</mo><mo>+</mo><msub><mi>P</mi><mtext>off</mtext></msub><mo stretchy="false">)</mo></mrow><mo stretchy="false">]</mo></mrow><mo>+</mo><msub><mi>n</mi><mtext>max</mtext></msub><mo stretchy="false">⟨</mo><msub><mi>S</mi><mtext>ion</mtext></msub><mo stretchy="false">⟩</mo><mspace width="0.15em"/><msub><mover><mi>ρ</mi><mo>~</mo></mover><mtext>ion</mtext></msub><mo stretchy="false">(</mo><mo stretchy="false">⟨</mo><mi>φ</mi><mo stretchy="false">⟩</mo><mo stretchy="false">)</mo></mrow></math></div>
+  <p>Inputs: ⟨ρ<sub>sol</sub>⟩ and A, ⟨S<sub>ion</sub>⟩ follow the current model density
+  (analytic, differentiable); P<sub>off</sub> carries the lateral-structure memory (anchor,
+  or prior + learned residual). ⟨ℰ<sub>z</sub>⟩ and ⟨P<sub>z</sub>⟩ are <em>solved for</em>,
+  exactly as φ, <strong>p</strong> are in the 3-D code.</p>
+
+  <p><strong>(g) The no-solve prior for P<sub>off</sub>.</strong> The lateral field structure
+  is dominated by the analytically known solute potential φ<sub>sol</sub>, so the covariance
+  can be estimated without solving anything:</p>
+  <div class="eq"><span class="lbl">screened-vacuum prior</span><math display="block"><mrow><msubsup><mi>P</mi><mtext>off</mtext><mtext>prior</mtext></msubsup><mo stretchy="false">(</mo><mi>z</mi><mo stretchy="false">)</mo><mo>=</mo><mfrac><msub><mi>ε</mi><mn>0</mn></msub><mrow><mn>4</mn><mi>π</mi></mrow></mfrac><mo stretchy="false">⟨</mo><mi>δ</mi><msub><mi>χ</mi><mn>0</mn></msub><mo>·</mo><mi>δ</mi><msubsup><mi>ℰ</mi><mi>z</mi><mtext>scr</mtext></msubsup><mo stretchy="false">⟩</mo><mo>,</mo><mspace width="1.2em"/><msup><mi>ℰ</mi><mtext>scr</mtext></msup><mo>≡</mo><mfrac><mrow><mo>−</mo><mo stretchy="false">(</mo><msub><mi>w</mi><mtext>b</mtext></msub><mo>∗</mo><mo>∇</mo><msub><mi>φ</mi><mtext>sol</mtext></msub><mo stretchy="false">)</mo></mrow><mrow><mi>ε</mi><mo stretchy="false">(</mo><mi mathvariant="bold">r</mi><mo stretchy="false">)</mo></mrow></mfrac><mo>,</mo><mspace width="1.2em"/><mi>ε</mi><mo stretchy="false">(</mo><mi mathvariant="bold">r</mi><mo stretchy="false">)</mo><mo>=</mo><mn>1</mn><mo>+</mo><mfrac><mrow><mn>4</mn><mi>π</mi></mrow><msub><mi>ε</mi><mn>0</mn></msub></mfrac><msub><mi>χ</mi><mn>0</mn></msub><mo stretchy="false">(</mo><mi mathvariant="bold">r</mi><mo stretchy="false">)</mo></mrow></math></div>
+  <p>Inputs: n<sub>e</sub> (→ cavity → χ₀) and the solute charges (→ φ<sub>sol</sub>) — no
+  polarization state, no solve. Measured accuracy 1.6% of the P<sub>off</sub> peak (§4);
+  the residual — the self-consistent interface screening the local division cannot
+  capture — is the learned target.</p>
+
+  <h2><span class="no">2</span>The closure quantities against DFT</h2>
+  <div class="fig">
+    <div class="legend" id="leg-a"></div>
+    <div class="panel-title">A(z) — effective susceptibility</div>
+    <svg id="ch-a2" width="100%" viewBox="0 0 880 190" role="img" aria-label="A(z) comparison"></svg>
+    <div class="legend" id="leg-pz"></div>
+    <div class="panel-title">⟨P<sub>z</sub>⟩(z) — plane-averaged polarization (10⁻² e/Å²)</div>
+    <svg id="ch-pz" width="100%" viewBox="0 0 880 210" role="img" aria-label="polarization comparison"></svg>
+    <div class="panel-title">P<sub>off</sub>(z) — the anchor used by the affine 1-D above
+    (extracted from the DFT reference field)</div>
+    <svg id="ch-p" width="100%" viewBox="0 0 880 200" role="img" aria-label="P_off comparison"></svg>
+    <div class="cap">cal_18 (35 Å cell, charged slab). <strong>A:</strong> the 1-D formula
+    (zero-field) and the value extracted from the DFT reference field agree in the bulk and
+    differ only in the transition region (rms 0.038) where field saturation suppresses the
+    response — a difference the ladder below shows to be harmless (the anchor absorbs it).
+    <strong>⟨P_z⟩:</strong> each curve is −∫ρ_bound dz of that method's own solution (the same
+    exact 1-D identity applied to all three); the affine solve overlays the reference, the
+    naive solve oscillates to ±0.5 with the wrong sign structure. <strong>P<sub>off</sub>:</strong>
+    a compact interface object — 95% of its weight in a 6.4 Å window; peak 6.2×10⁻² on the
+    45 Å training cell (cal_1). Click legend chips to hide/show curves.</div>
+  </div>
+
+  <h2><span class="no">3</span>The pure 1-D solve, channel by channel</h2>
+  <p>What the naive 1-D method (no P<sub>off</sub>; cavity built in 3-D and averaged — its
+  best legacy variant) actually produces, against the DFT reference and against the affine
+  1-D solve with a fine anchor. The three channels fail — or don't — for different reasons:</p>
+  <div class="fig">
+    <div class="legend" id="chleg"></div>
+    <div class="panel-title">φ(z) — plane-averaged potential (eV)</div>
+    <svg id="pp-phi" width="100%" viewBox="0 0 880 200" role="img" aria-label="phi profiles"></svg>
+    <div class="panel-title">ρ_bound(z) — bound (polarization) charge (10⁻³ e/Å³)</div>
+    <svg id="pp-rb" width="100%" viewBox="0 0 880 200" role="img" aria-label="bound charge profiles"></svg>
+    <div class="panel-title">ρ_ion(z) — ionic charge (10⁻⁴ e/Å³)</div>
+    <svg id="pp-ri" width="100%" viewBox="0 0 880 200" role="img" aria-label="ion charge profiles"></svg>
+    <div class="cap"><strong>ρ_ion:</strong> the pure 1-D solve is already right (peak −11.19
+    vs −11.26×10⁻⁴; the two curves overlap) — the ion closure needs no 3-D information.
+    <strong>ρ_bound:</strong> the failure lives here — the naive solve oscillates to
+    ±27×10⁻³ against a smooth −3.6×10⁻³ reference (7× overshoot, wrong sign structure);
+    the affine closure restores it to reference within line width.
+    <strong>φ:</strong> integrating that bound charge leaves the naive potential with a
+    ~1.4 eV error through the interface (0.65 eV RMSE), while the affine curve is
+    indistinguishable from the reference at this scale. cal_18, identical machinery,
+    identical ion treatment — only the dielectric closure differs. Click a legend chip to
+    hide/show that curve in all three panels.</div>
+  </div>
+
+  
+
+  <h2><span class="no">4</span>The method ladder — every variant, one axis</h2>
+  <div class="fig">
+    <svg id="ladder" width="100%" viewBox="0 0 880 320" role="img" aria-label="phi error by method"></svg>
+    <div class="cap">Plane-averaged potential error φ<sub>z</sub> RMSE (log scale) on cal_18,
+    identical 1-D machinery, 5 dipole fixsteps — only the closure source changes. The
+    fail tier (~0.3–1 eV) contains every attempt to avoid a 3-D solve, including the two
+    physical priors for the anchor (raw and dielectrically-screened vacuum field: they miss
+    the self-consistent interface screening that <em>is</em> P<sub>off</sub>). One 3-D solve
+    for the anchor changes everything.</div>
+  </div>
+
+  <div class="tblwrap"><table>
+    <tr><th>A source \ anchor source</th><th class="num">fine 3-D</th><th class="num">coarse 3-D</th>
+        <th class="num">screened vacuum</th><th class="num">raw vacuum</th></tr>
+    <tr><td>extracted, fine 3-D</td><td class="num hl">2.46e-4</td><td class="num">7.82e-3</td>
+        <td class="num">0.63</td><td class="num">1.01</td></tr>
+    <tr><td>extracted, coarse 3-D</td><td class="num">3.98e-4</td><td class="num">7.32e-3</td>
+        <td class="num">0.60</td><td class="num">1.02</td></tr>
+    <tr><td><strong>formula (no solve)</strong></td><td class="num hl">3.39e-4</td><td class="num">8.51e-3</td>
+        <td class="num">0.79</td><td class="num">1.00</td></tr>
+  </table></div>
+  <p>Two structural facts, read column-wise vs row-wise: <strong>the anchor dominates
+  (~30×) and A barely matters</strong> — the zero-solve formula A loses nothing
+  (3.39e-4 vs 2.46e-4). The coarse-anchor column carries a grid caveat: the anchor source
+  cannot be coarser than ≈0.2 Å spacing — the bound-charge channel of the solve collapses
+  beyond it (the grid-convergence study measured the bound dipole term dying
+  −6.3 → −0.15 V from 0.15 to 0.30 Å).</p>
+
+  <h2><span class="no">5</span>How accurate must P<sub>off</sub> be</h2>
+  <div class="tblwrap"><table>
+    <tr><th>P<sub>off</sub> error (abs, rms)</th><th class="num">% of peak (0.338)</th><th class="num">φ<sub>z</sub> error</th><th>source</th></tr>
+    <tr><td>≈ 0 (exact anchor)</td><td class="num">—</td><td class="num">3.4e-4 eV</td><td>fine 3-D</td></tr>
+    <tr><td>4.4e-4</td><td class="num">0.13%</td><td class="num">8.5e-3 eV</td><td>coarse 3-D</td></tr>
+    <tr><td>5.4e-3</td><td class="num">1.6%</td><td class="num">0.79 eV</td><td>screened vacuum</td></tr>
+  </table></div>
+  <p>The mapping is <em>superlinear</em>: the potential is a double integral of the bound
+  charge, so systematically-biased P<sub>off</sub> errors accumulate. Working requirement:
+  <strong>P<sub>off</sub> to ~5×10⁻⁴ absolute for solver-grade φ (~10⁻² eV); ~10⁻³ for
+  training-grade</strong>. This is the accuracy bar any learned or approximated
+  P<sub>off</sub> must clear — it is a hard target, not a soft one.</p>
+
+  <h2><span class="no">6</span>P<sub>off</sub> is geometry-dominated</h2>
+  <p>Fixed geometry (cal_1), density coefficients captured from models at three training
+  stages, one accurate 3-D solve each:</p>
+  <div class="tblwrap"><table>
+    <tr><th>density pair</th><th class="num">density change |c|</th><th class="num">ΔP<sub>off</sub> rms</th>
+        <th class="num">% of peak (6.2e-2)</th></tr>
+    <tr><td>epoch 25 vs epoch 83</td><td class="num">5.89 → 6.03</td><td class="num">7.0e-4</td><td class="num">1.12%</td></tr>
+    <tr><td>epoch 9 (near-untrained) vs 83</td><td class="num">3.86 → 6.03</td><td class="num">9.5e-4</td><td class="num">1.53%</td></tr>
+  </table></div>
+  <p>The density changes enormously; P<sub>off</sub> moves ~1%. <strong>P<sub>off</sub> is
+  set by the geometry (where the cavity is), not by the fine structure of the
+  density.</strong> Two consequences: labels computed once per structure stay valid across
+  a whole training run, and a learned P<sub>off</sub>(geometry) is an interpolation task,
+  not a moving target.</p>
+
+  <h2><span class="no">7</span>Where this lands</h2>
+  <p>One uniform, stateless pipeline for training and MD — the same inputs in both
+  (no lagged refresh anywhere):</p>
+  <ol>
+    <li><strong>Labels</strong> (offline, once): one 3-D solve per training geometry
+      (320 × 2.4 s ≈ 13 min) → exact (geometry → P<sub>off</sub>, A, s̄<sub>ion</sub>) pairs.
+      The 3-D solver's only remaining role.</li>
+    <li><strong>Closure heads</strong>: small regression heads supervised <em>only</em> by
+      these labels (never by the potential loss — no fudge channel), pre-trained to the
+      §4 accuracy bar, then in the loop.</li>
+    <li><strong>Every step</strong> (training and MD identically): model forward → heads
+      predict P<sub>off</sub>/A/s̄<sub>ion</sub> → differentiable 1-D nonlinear solve
+      (~0.03 s, 300–500 points, ions fully nonlinear). Fully differentiable, no state.</li>
+  </ol>
+  <div class="note">Open question, and the route's single remaining risk: cross-geometry
+  learnability — can a head predict P<sub>off</sub> to ~10⁻³ on held-out structures?
+  Everything else on this page is measured.</div>
+
+  <div class="footer">cep-dip-python-pb solver reports ·
+  <a href="./index.html">index</a> ·
+  companion training-side reports:
+  <a href="https://ruoywang.github.io/polar-mace-planar/">polar-mace-planar</a> ·
+  notation: Islam et&nbsp;al., J. Chem. Phys. 159, 234117 (2023)</div>
+</div>
+<script>
+(function(){
+  const NS="http://www.w3.org/2000/svg";
+  function el(t,a){const n=document.createElementNS(NS,t);for(const k in a)n.setAttribute(k,a[k]);return n;}
+  function txt(g,x,y,s,a){const t=el("text",Object.assign({x,y},a||{}));t.textContent=s;g.appendChild(t);return t;}
+  const MONO='ui-monospace,Menlo,monospace', SANS='-apple-system,Segoe UI,Roboto,sans-serif';
+  const Z=[0.00,0.18,0.36,0.55,0.73,0.91,1.09,1.28,1.46,1.64,1.82,2.01,2.19,2.37,2.55,2.73,2.92,3.10,3.28,3.46,3.65,3.83,4.01,4.19,4.38,4.56,4.74,4.92,5.10,5.29,5.47,5.65,5.83,6.02,6.20,6.38,6.56,6.74,6.93,7.11,7.29,7.47,7.66,7.84,8.02,8.20,8.39,8.57,8.75,8.93,9.11,9.30,9.48,9.66,9.84,10.03,10.21,10.39,10.57,10.76,10.94,11.12,11.30,11.48,11.67,11.85,12.03,12.21,12.40,12.58,12.76,12.94,13.12,13.31,13.49,13.67,13.85,14.04,14.22,14.40,14.58,14.77,14.95,15.13,15.31,15.49,15.68,15.86,16.04,16.22,16.41,16.59,16.77,16.95,17.14,17.32,17.50,17.68,17.86,18.05,18.23,18.41,18.59,18.78,18.96,19.14,19.32,19.51,19.69,19.87,20.05,20.23,20.42,20.60,20.78,20.96,21.15,21.33,21.51,21.69,21.88,22.06,22.24,22.42,22.60,22.79,22.97,23.15,23.33,23.52,23.70,23.88,24.06,24.24,24.43,24.61,24.79,24.97,25.16,25.34,25.52,25.70,25.89,26.07,26.25,26.43,26.61,26.80,26.98,27.16,27.34,27.53,27.71,27.89,28.07,28.26,28.44,28.62,28.80,28.98,29.17,29.35,29.53,29.71,29.90,30.08,30.26,30.44,30.62,30.81,30.99,31.17,31.35,31.54,31.72,31.90,32.08,32.27,32.45,32.63,32.81,32.99,33.18,33.36,33.54,33.72,33.91,34.09,34.27,34.45,34.64,34.82];
+  const P=[0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0001,-0.0004,-0.0007,-0.0004,0.0000,0.0001,0.0000,0.0000,0.0000,0.0000,0.0000,0.0001,0.0006,0.0008,-0.0032,-0.0082,-0.0081,-0.0031,0.0031,0.0051,0.0013,-0.0019,-0.0022,-0.0028,-0.0025,-0.0015,-0.0015,0.0024,0.0081,0.0026,-0.0104,-0.0195,-0.0225,0.0059,0.0645,0.1051,0.1375,0.1669,0.1739,0.1255,0.0641,0.0161,-0.0043,0.0099,0.0534,0.1234,0.1614,0.1160,0.0624,0.0318,0.0150,0.0066,0.0026,0.0003,-0.0003,-0.0003,-0.0003,-0.0003,-0.0003,-0.0003,-0.0003,-0.0002,-0.0002,-0.0002,-0.0002,-0.0001,-0.0001,-0.0001,-0.0001,-0.0001,-0.0001,-0.0001,-0.0001,-0.0001,-0.0001,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000];
+  const A=[0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0001,0.0002,0.0003,0.0002,0.0001,0.0000,0.0000,0.0000,0.0000,0.0000,0.0002,0.0010,0.0024,0.0037,0.0047,0.0054,0.0057,0.0055,0.0053,0.0046,0.0041,0.0035,0.0034,0.0037,0.0041,0.0047,0.0053,0.0061,0.0074,0.0097,0.0134,0.0193,0.0227,0.0273,0.0309,0.0391,0.0502,0.0675,0.0828,0.1036,0.1209,0.1476,0.1724,0.1993,0.2173,0.2369,0.2472,0.2572,0.2630,0.2728,0.2788,0.2884,0.2940,0.3031,0.3065,0.3126,0.3148,0.3199,0.3218,0.3269,0.3300,0.3364,0.3411,0.3481,0.3531,0.3594,0.3638,0.3695,0.3735,0.3785,0.3820,0.3863,0.3892,0.3926,0.3949,0.3977,0.3996,0.4018,0.4033,0.4050,0.4062,0.4075,0.4085,0.4096,0.4104,0.4112,0.4118,0.4125,0.4129,0.4134,0.4138,0.4142,0.4144,0.4147,0.4148,0.4150,0.4151,0.4151,0.4151,0.4151,0.4151,0.4150,0.4148,0.4147,0.4145,0.4142,0.4136,0.4116,0.4060,0.3919,0.3630,0.3143,0.2474,0.1725,0.1043,0.0538,0.0234,0.0086,0.0026,0.0007,0.0001,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000];
+
+  function lineChart(svgId, ys, ymin, ymax, yticks, fmt){
+    const svg=document.getElementById(svgId);
+    const W=880,H=190,M={l:64,r:20,t:12,b:30},Z0=0,Z1=35.09;
+    const sx=z=>M.l+(z-Z0)/(Z1-Z0)*(W-M.l-M.r);
+    const sy=v=>M.t+(ymax-v)/(ymax-ymin)*(H-M.t-M.b);
+    yticks.forEach(v=>{
+      svg.appendChild(el("line",{x1:M.l,x2:W-M.r,y1:sy(v),y2:sy(v),stroke:"var(--hair)"}));
+      txt(svg,M.l-8,sy(v)+4,fmt(v),{"text-anchor":"end",fill:"var(--muted)","font-size":"11","font-family":MONO});
+    });
+    [0,5,10,15,20,25,30,35].forEach(z=>{
+      txt(svg,sx(z),H-M.b+16,z,{"text-anchor":"middle",fill:"var(--muted)","font-size":"11","font-family":MONO});
+    });
+    txt(svg,W-M.r,H-4,"z / Å",{"text-anchor":"end",fill:"var(--ink2)","font-size":"12","font-family":SANS});
+    const d=ys.map((v,i)=>(i?"L":"M")+sx(Z[i]).toFixed(1)+","+sy(v).toFixed(1)).join(" ");
+    svg.appendChild(el("path",{d,fill:"none",stroke:"var(--accent)","stroke-width":2,
+      "stroke-linejoin":"round"}));
+  }
+
+  /* ladder */
+  (function(){
+    const g=document.getElementById("ladder");
+    const data=[
+      {n:"raw-vacuum prior (no solve)",v:1.00,tier:0},
+      {n:"screened-vacuum prior (no solve)",v:0.79,tier:0},
+      {n:"naive planar reduction (no P_off, legacy)",v:0.65,tier:0},
+      {n:"ratio closure, A from 3-D (no P_off, legacy)",v:0.36,tier:0},
+      {n:"coarse 3-D anchor (0.18 Å) + formula A",v:8.5e-3,tier:1},
+      {n:"fine 3-D anchor + formula A",v:3.39e-4,tier:2},
+      {n:"fine 3-D anchor + extracted A",v:2.46e-4,tier:2}
+    ];
+    const X0=330,X1=840,T=1e-4,B=2;
+    const px=v=>X0+(Math.log10(v)-Math.log10(T))/(Math.log10(B)-Math.log10(T))*(X1-X0);
+    [1e-4,1e-3,1e-2,1e-1,1].forEach(v=>{
+      g.appendChild(el("line",{x1:px(v),x2:px(v),y1:12,y2:282,stroke:"var(--hair)"}));
+      txt(g,px(v),300,v>=1?"1":v.toExponential(0).replace("e-","e−"),
+        {"text-anchor":"middle",fill:"var(--muted)","font-size":"11","font-family":MONO});
+    });
+    txt(g,X1,316,"φ_z RMSE / eV",{"text-anchor":"end",fill:"var(--ink2)","font-size":"12","font-family":SANS});
+    data.forEach((d,i)=>{
+      const y=18+i*37;
+      txt(g,320,y+13,d.n,{"text-anchor":"end",fill:"var(--ink2)","font-size":"12.5","font-family":SANS});
+      g.appendChild(el("rect",{x:X0,y:y,width:Math.max(2,px(d.v)-X0),height:17,rx:3,
+        fill: d.tier===2?"var(--accent)":(d.tier===1?"var(--s2)":"var(--muted)"),
+        opacity: d.tier===0?.55:1}));
+      txt(g,px(d.v)+6,y+13,d.v>=0.01?d.v.toFixed(2):d.v.toExponential(1).replace("e-","e−"),
+        {fill:"var(--ink)","font-size":"11.5","font-family":MONO});
+    });
+  })();
+
+  /* ---- channel anatomy panels ---- */
+  (function(){
+    const PHID=[0.3081,0.5222,0.6095,0.6095,0.6095,0.6095,0.6095,0.6095,0.6095,0.6095,0.6095,0.6095,0.6095,0.6095,0.6095,0.6095,0.6094,0.6093,0.6091,0.6087,0.6079,0.6065,0.6038,0.5989,0.5896,0.5723,0.5403,0.4809,0.3706,0.1647,-0.2216,-0.9474,-2.2947,-4.7992,-9.6813,-16.1707,-20.9745,-23.2239,-23.4378,-20.2253,-14.1656,-8.6242,-4.9093,-2.5478,-1.2940,-0.7302,-0.5455,-0.5877,-0.7609,-0.9622,-1.3077,-1.8361,-2.4365,-3.0862,-3.5660,-3.6494,-3.5035,-3.1804,-2.7839,-2.6797,-2.6607,-2.5078,-2.4000,-2.3194,-2.1670,-2.1692,-2.4789,-2.8215,-3.0441,-3.0211,-2.8115,-2.6382,-2.7066,-2.8133,-2.9275,-3.1040,-3.1730,-3.2322,-3.3081,-3.0630,-2.7855,-2.9237,-3.2043,-3.4792,-3.6611,-3.4041,-2.7811,-2.1452,-1.4971,-0.9269,-0.5536,-0.3860,-0.3430,-0.3539,-0.3650,-0.3440,-0.2748,-0.1387,-0.0250,0.0277,0.0541,0.0645,0.0675,0.0671,0.0649,0.0620,0.0591,0.0562,0.0534,0.0506,0.0478,0.0451,0.0425,0.0400,0.0376,0.0353,0.0332,0.0312,0.0293,0.0276,0.0260,0.0244,0.0230,0.0217,0.0204,0.0193,0.0182,0.0172,0.0163,0.0154,0.0146,0.0138,0.0131,0.0124,0.0118,0.0113,0.0107,0.0102,0.0098,0.0094,0.0090,0.0087,0.0083,0.0081,0.0078,0.0076,0.0074,0.0072,0.0070,0.0069,0.0068,0.0067,0.0067,0.0067,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0940];
+    const PHIN=[0.8847,1.4632,1.7011,1.7040,1.7070,1.7099,1.7129,1.7158,1.7188,1.7217,1.7247,1.7276,1.7305,1.7335,1.7364,1.7393,1.7422,1.7450,1.7478,1.7503,1.7525,1.7540,1.7543,1.7523,1.7460,1.7317,1.7026,1.6462,1.5388,1.3358,0.9525,0.2296,-1.1147,-3.6163,-8.4954,-14.9818,-19.7827,-22.0293,-22.2402,-19.0248,-12.9622,-7.4178,-3.6999,-1.3355,-0.0788,0.4879,0.6756,0.6364,0.4661,0.2677,-0.0748,-0.6001,-1.1969,-1.8426,-2.3181,-2.3979,-2.2492,-1.9235,-1.5242,-1.4170,-1.3950,-1.2393,-1.1289,-1.0466,-0.8921,-0.8844,-1.1765,-1.4991,-1.7053,-1.6795,-1.4763,-1.3069,-1.3681,-1.4606,-1.5604,-1.7231,-1.7792,-1.8272,-1.8991,-1.6602,-1.3891,-1.5183,-1.7741,-2.0188,-2.1970,-1.9921,-1.4582,-0.9406,-0.4454,-0.0645,0.0949,0.0924,0.0867,0.0861,0.0809,0.0797,0.0771,0.0783,0.0781,0.0756,0.0731,0.0706,0.0679,0.0653,0.0626,0.0599,0.0572,0.0546,0.0519,0.0493,0.0467,0.0441,0.0416,0.0391,0.0368,0.0346,0.0326,0.0306,0.0288,0.0271,0.0255,0.0240,0.0226,0.0213,0.0201,0.0190,0.0180,0.0170,0.0161,0.0153,0.0145,0.0137,0.0130,0.0124,0.0118,0.0113,0.0108,0.0103,0.0099,0.0095,0.0091,0.0088,0.0085,0.0082,0.0080,0.0078,0.0076,0.0075,0.0074,0.0073,0.0072,0.0072,0.0072,0.0071,0.0072,0.0072,0.0072,0.0073,0.0073,0.0073,0.0074,0.0074,0.0075,0.0075,0.0075,0.0077,0.0077,0.0078,0.0083,0.0090,0.0104,0.0126,0.0153,0.0181,0.0211,0.0240,0.0270,0.0299,0.0329,0.0358,0.0388,0.0417,0.0446,0.0476,0.0505,0.0535,0.0564,0.0594,0.0623,0.0653,0.0682,0.3061];
+    const PHIA=[0.3083,0.5227,0.6102,0.6102,0.6102,0.6101,0.6101,0.6101,0.6101,0.6101,0.6101,0.6101,0.6101,0.6101,0.6100,0.6100,0.6099,0.6098,0.6096,0.6092,0.6084,0.6070,0.6043,0.5994,0.5901,0.5728,0.5408,0.4814,0.3711,0.1651,-0.2211,-0.9470,-2.2943,-4.7988,-9.6808,-16.1702,-20.9741,-23.2236,-23.4375,-20.2250,-14.1654,-8.6239,-4.9090,-2.5476,-1.2938,-0.7300,-0.5453,-0.5875,-0.7607,-0.9620,-1.3076,-1.8360,-2.4364,-3.0861,-3.5659,-3.6493,-3.5034,-3.1803,-2.7838,-2.6796,-2.6606,-2.5077,-2.3999,-2.3193,-2.1669,-2.1690,-2.4788,-2.8213,-3.0440,-3.0211,-2.8114,-2.6382,-2.7066,-2.8133,-2.9274,-3.1039,-3.1730,-3.2322,-3.3081,-3.0630,-2.7855,-2.9236,-3.2043,-3.4791,-3.6610,-3.4040,-2.7811,-2.1452,-1.4972,-0.9270,-0.5537,-0.3861,-0.3431,-0.3540,-0.3650,-0.3441,-0.2749,-0.1388,-0.0251,0.0276,0.0540,0.0645,0.0674,0.0670,0.0648,0.0619,0.0590,0.0561,0.0533,0.0505,0.0477,0.0450,0.0424,0.0399,0.0375,0.0352,0.0331,0.0311,0.0293,0.0275,0.0259,0.0244,0.0230,0.0216,0.0204,0.0192,0.0181,0.0171,0.0162,0.0153,0.0145,0.0138,0.0131,0.0124,0.0118,0.0112,0.0107,0.0102,0.0098,0.0093,0.0090,0.0086,0.0083,0.0080,0.0078,0.0075,0.0073,0.0072,0.0070,0.0069,0.0068,0.0067,0.0067,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0066,0.0065,0.0065,0.0065,0.0065,0.0065,0.0065,0.0065,0.0065,0.0065,0.0065,0.0065,0.0065,0.0065,0.0065,0.0065,0.0064,0.0064,0.0939];
+    const RBD=[0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,0.0000,0.0007,0.0042,0.0107,0.0118,0.0037,-0.0066,-0.0101,-0.0077,-0.0047,-0.0017,0.0012,0.0175,0.0842,0.1671,0.1496,0.0630,0.0051,-0.0176,-0.0248,-0.0196,-0.0063,0.0069,0.0085,-0.0053,-0.0269,-0.0491,-0.0672,-0.0817,-0.0945,-0.1103,-0.1512,-0.2469,-0.3098,-0.2930,-0.3565,-0.4193,-0.5182,-0.8158,-1.0993,-1.2091,-1.6723,-2.3149,-2.9209,-3.2773,-3.6076,-3.4002,-2.6629,-1.7513,-0.8119,-0.3356,-0.0819,0.0989,-0.0010,-0.0609,0.0055,-0.0375,-0.0776,-0.0070,0.0530,0.1193,0.1984,0.3116,0.4823,0.6934,0.8913,1.0367,1.1020,1.1091,1.1002,1.0879,1.0722,1.0537,1.0335,1.0055,0.9628,0.9128,0.8647,0.8190,0.7762,0.7357,0.6979,0.6622,0.6288,0.5975,0.5684,0.5410,0.5157,0.4919,0.4701,0.4497,0.4311,0.4138,0.3982,0.3838,0.3709,0.3591,0.3488,0.3395,0.3313,0.3230,0.3135,0.2987,0.2745,0.2367,0.1867,0.1310,0.0802,0.0419,0.0186,0.0069,0.0021,0.0004,-0.0000,-0.0000,-0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000];
+    const RBN=[-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0001,-0.0001,-0.0001,-0.0001,-0.0001,-0.0001,-0.0001,-0.0001,-0.0001,-0.0001,-0.0003,-0.0029,-0.0194,-0.0586,-0.0818,-0.0348,0.1098,0.1582,-0.0145,-0.0380,-0.0153,-0.0014,0.0220,0.1247,0.3408,0.2060,-1.3817,-1.3559,-0.3823,0.4237,2.5182,1.6158,-0.4147,-2.1187,-1.1295,0.0121,0.0734,0.0684,0.0967,1.1014,1.8440,0.0237,-3.1492,-3.0005,-1.4897,3.7522,10.0637,5.1682,3.9081,4.7180,4.9480,3.1694,-8.6131,-26.6294,-12.0746,-2.4909,1.4748,5.0411,11.2158,-5.6170,-11.3843,-3.6882,-2.6685,-1.1069,-0.6367,-0.3123,-0.1537,-0.0539,0.0058,0.0636,0.1287,0.2051,0.3159,0.4865,0.6969,0.8917,1.0305,1.0883,1.0881,1.0743,1.0617,1.0530,1.0479,1.0427,1.0248,0.9825,0.9226,0.8587,0.7980,0.7462,0.7048,0.6731,0.6473,0.6239,0.5992,0.5722,0.5431,0.5142,0.4876,0.4656,0.4482,0.4335,0.4181,0.4036,0.3930,0.3856,0.3774,0.3704,0.3693,0.3706,0.3604,0.3357,0.2939,0.2420,0.2233,0.2330,0.1866,0.0754,0.0064,0.0450,0.0388,-0.0663,-0.0052,0.0398,-0.0601,0.0550,-0.0003,-0.1172,0.0725,0.0442,-0.1244,-0.1572,-0.1194,-0.0636,-0.0228,-0.0058,-0.0011,-0.0002,-0.0000,0.0000,0.0000,0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000];
+    const RBA=[0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,0.0001,0.0010,0.0053,0.0122,0.0121,0.0027,-0.0078,-0.0107,-0.0079,-0.0048,-0.0017,0.0012,0.0175,0.0842,0.1673,0.1496,0.0624,0.0040,-0.0183,-0.0256,-0.0202,-0.0056,0.0078,0.0089,-0.0044,-0.0261,-0.0492,-0.0679,-0.0818,-0.0937,-0.1097,-0.1501,-0.2436,-0.3060,-0.2935,-0.3645,-0.4354,-0.5413,-0.8383,-1.1025,-1.1763,-1.6255,-2.3007,-2.9398,-3.2767,-3.5759,-3.4017,-2.7058,-1.7636,-0.8019,-0.3377,-0.0787,0.0978,-0.0174,-0.0730,0.0182,-0.0099,-0.0616,-0.0123,0.0293,0.1061,0.2179,0.3295,0.4727,0.6897,0.9152,1.0584,1.1038,1.1009,1.0906,1.0884,1.0746,1.0376,1.0118,0.9918,0.9508,0.9097,0.8738,0.8314,0.7919,0.7489,0.6986,0.6556,0.6212,0.5912,0.5667,0.5381,0.5103,0.4986,0.4898,0.4613,0.4264,0.4112,0.4048,0.3795,0.3537,0.3566,0.3680,0.3561,0.3274,0.3077,0.3154,0.3111,0.2602,0.2175,0.1713,0.1137,0.1003,0.0396,0.0018,0.0515,0.0013,-0.0198,0.0160,-0.0269,0.0226,0.0418,-0.0460,-0.0303,0.0163,0.0101,0.0009,0.0003,0.0003,0.0001,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000];
+    const RID=[-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,0.0000,-0.0000,0.0000,-0.0000,-0.0000,0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,-0.0000,-0.0000,-0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0006,-0.0056,-0.0326,-0.1261,-0.3645,-0.7958,-1.3674,-2.1173,-3.2361,-4.9605,-7.1198,-9.1256,-10.6104,-11.2559,-11.3104,-11.2114,-11.0777,-10.9108,-10.7185,-10.5070,-10.2216,-9.7806,-9.2709,-8.7784,-8.3140,-7.8767,-7.4656,-7.0793,-6.7169,-6.3773,-6.0596,-5.7626,-5.4855,-5.2274,-4.9876,-4.7651,-4.5593,-4.3695,-4.1951,-4.0354,-3.8899,-3.7582,-3.6398,-3.5340,-3.4403,-3.3559,-3.2738,-3.1757,-3.0273,-2.7809,-2.3994,-1.8912,-1.3269,-0.8107,-0.4242,-0.1876,-0.0695,-0.0214,-0.0055,-0.0012,-0.0002,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,-0.0000,-0.0000,0.0000,-0.0000,-0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000];
+    const RIN=[-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0005,-0.0053,-0.0310,-0.1206,-0.3523,-0.7770,-1.3451,-2.0946,-3.2153,-4.9368,-7.0778,-9.0459,-10.4932,-11.1300,-11.1937,-11.1018,-10.9691,-10.7978,-10.5970,-10.3754,-10.0850,-9.6504,-9.1536,-8.6753,-8.2250,-7.8011,-7.4021,-7.0268,-6.6745,-6.3444,-6.0362,-5.7488,-5.4816,-5.2335,-5.0036,-4.7908,-4.5946,-4.4142,-4.2493,-4.0994,-3.9638,-3.8422,-3.7345,-3.6402,-3.5585,-3.4870,-3.4190,-3.3351,-3.1977,-2.9544,-2.5621,-2.0282,-1.4303,-0.8793,-0.4628,-0.2056,-0.0766,-0.0238,-0.0061,-0.0013,-0.0002,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000];
+    const ZALL=Z;
+    const SER=[{n:"DFT reference",c:"var(--ink2)",dash:"5,4"},
+               {n:"naive 1-D (no P_off)",c:"var(--s3)"},
+               {n:"affine 1-D (fine anchor)",c:"var(--accent)"}];
+    const REG=[[],[],[]];
+    const state=[true,true,true];
+    const lg=document.getElementById("chleg");
+    SER.forEach((s0,i)=>{
+      const b=document.createElement("button");
+      b.type="button"; b.setAttribute("aria-pressed","true");
+      b.style.cssText="display:flex;align-items:center;gap:6px;background:none;"+
+        "border:1px solid var(--hair);border-radius:999px;padding:3px 12px;cursor:pointer;"+
+        "font:12.5px -apple-system,'Segoe UI',Roboto,sans-serif;color:var(--ink2)";
+      b.innerHTML='<i style="background:'+s0.c+'"></i>'+s0.n;
+      b.addEventListener("click",()=>{
+        state[i]=!state[i];
+        b.setAttribute("aria-pressed",String(state[i]));
+        b.style.opacity=state[i]?"1":"0.35";
+        b.style.borderStyle=state[i]?"solid":"dashed";
+        REG[i].forEach(p=>p.style.display=state[i]?"":"none");
+      });
+      lg.appendChild(b);
+    });
+    function panel(id, series, ymin, ymax, yticks, fmt){
+      const svg=document.getElementById(id);
+      const W=880,H=200,M={l:64,r:20,t:12,b:28},Z0=0,Z1=35.09;
+      const sx=z=>M.l+(z-Z0)/(Z1-Z0)*(W-M.l-M.r);
+      const sy=v=>M.t+(ymax-v)/(ymax-ymin)*(H-M.t-M.b);
+      const NS="http://www.w3.org/2000/svg";
+      const el=(t,a)=>{const n=document.createElementNS(NS,t);for(const k in a)n.setAttribute(k,a[k]);return n;};
+      yticks.forEach(v=>{
+        svg.appendChild(el("line",{x1:M.l,x2:W-M.r,y1:sy(v),y2:sy(v),stroke:"var(--hair)"}));
+        const t=el("text",{x:M.l-8,y:sy(v)+4,"text-anchor":"end",fill:"var(--muted)",
+          "font-size":"11","font-family":"ui-monospace,Menlo,monospace"});
+        t.textContent=fmt(v); svg.appendChild(t);
+      });
+      [0,5,10,15,20,25,30,35].forEach(z=>{
+        const t=el("text",{x:sx(z),y:H-M.b+16,"text-anchor":"middle",fill:"var(--muted)",
+          "font-size":"11","font-family":"ui-monospace,Menlo,monospace"});
+        t.textContent=z; svg.appendChild(t);
+      });
+      series.forEach(sr=>{
+        const d=sr.y.map((v,i)=>(i?"L":"M")+sx(ZALL[i]).toFixed(1)+","+
+          sy(Math.max(ymin,Math.min(ymax,v))).toFixed(1)).join(" ");
+        const a={d,fill:"none",stroke:sr.c,"stroke-width":sr.dash?1.8:2,"stroke-linejoin":"round"};
+        if(sr.dash)a["stroke-dasharray"]=sr.dash;
+        const node=el("path",a);
+        svg.appendChild(node);
+        if(sr.si!==undefined)REG[sr.si].push(node);
+      });
+    }
+    panel("pp-phi",[{y:PHID,c:SER[0].c,dash:"5,4",si:0},{y:PHIN,c:SER[1].c,si:1},{y:PHIA,c:SER[2].c,si:2}],
+      -25,2,[-24,-16,-8,0],v=>v);
+    panel("pp-rb",[{y:RBD,c:SER[0].c,dash:"5,4",si:0},{y:RBN,c:SER[1].c,si:1},{y:RBA,c:SER[2].c,si:2}],
+      -28,13,[-20,-10,0,10],v=>v);
+    panel("pp-ri",[{y:RID,c:SER[0].c,dash:"5,4",si:0},{y:RIN,c:SER[1].c,si:1}],
+      -12.5,1,[-12,-8,-4,0],v=>v);
+  })();
+
+  /* ---- closure-quantity comparison panels (toggleable) ---- */
+  (function(){
+    const AF=[0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0001,0.0005,0.0008,0.0009,0.0007,0.0004,0.0001,0.0000,0.0000,0.0000,0.0002,0.0011,0.0035,0.0064,0.0087,0.0102,0.0110,0.0113,0.0111,0.0104,0.0094,0.0084,0.0075,0.0069,0.0067,0.0069,0.0075,0.0084,0.0097,0.0119,0.0165,0.0239,0.0319,0.0395,0.0475,0.0584,0.0754,0.0987,0.1263,0.1575,0.1920,0.2307,0.2741,0.3144,0.3457,0.3685,0.3829,0.3916,0.3982,0.4044,0.4104,0.4160,0.4211,0.4251,0.4271,0.4276,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4276,0.4271,0.4254,0.4198,0.4056,0.3761,0.3264,0.2578,0.1807,0.1101,0.0574,0.0253,0.0093,0.0029,0.0007,0.0002,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000];
+    const AD=[0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0001,0.0002,0.0003,0.0002,0.0001,0.0000,0.0000,0.0000,0.0000,0.0000,0.0002,0.0011,0.0026,0.0042,0.0055,0.0065,0.0068,0.0067,0.0062,0.0055,0.0049,0.0045,0.0044,0.0045,0.0049,0.0055,0.0062,0.0072,0.0084,0.0108,0.0158,0.0224,0.0279,0.0331,0.0383,0.0468,0.0601,0.0769,0.0956,0.1160,0.1382,0.1644,0.1959,0.2237,0.2454,0.2642,0.2761,0.2841,0.2915,0.2988,0.3066,0.3135,0.3207,0.3275,0.3322,0.3359,0.3390,0.3417,0.3444,0.3473,0.3510,0.3555,0.3607,0.3662,0.3715,0.3766,0.3813,0.3858,0.3900,0.3940,0.3977,0.4011,0.4041,0.4068,0.4093,0.4114,0.4134,0.4151,0.4167,0.4181,0.4193,0.4204,0.4214,0.4222,0.4230,0.4237,0.4243,0.4248,0.4253,0.4257,0.4260,0.4263,0.4266,0.4269,0.4271,0.4272,0.4274,0.4275,0.4276,0.4277,0.4277,0.4277,0.4277,0.4277,0.4277,0.4276,0.4271,0.4254,0.4198,0.4054,0.3759,0.3261,0.2576,0.1806,0.1100,0.0573,0.0252,0.0093,0.0029,0.0007,0.0002,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000];
+    const PD=[-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0001,-0.0002,-0.0005,-0.0006,-0.0005,-0.0003,-0.0002,-0.0001,-0.0000,-0.0000,-0.0002,-0.0014,-0.0041,-0.0071,-0.0086,-0.0089,-0.0087,-0.0082,-0.0078,-0.0077,-0.0077,-0.0079,-0.0079,-0.0075,-0.0067,-0.0056,-0.0041,-0.0025,-0.0005,0.0020,0.0060,0.0115,0.0169,0.0230,0.0304,0.0393,0.0525,0.0716,0.0930,0.1209,0.1601,0.2109,0.2691,0.3336,0.3973,0.4496,0.4858,0.5047,0.5123,0.5150,0.5137,0.5131,0.5142,0.5143,0.5147,0.5161,0.5166,0.5159,0.5140,0.5108,0.5057,0.4977,0.4861,0.4707,0.4524,0.4325,0.4122,0.3921,0.3723,0.3526,0.3333,0.3144,0.2959,0.2782,0.2613,0.2453,0.2302,0.2158,0.2023,0.1894,0.1771,0.1655,0.1545,0.1440,0.1340,0.1245,0.1154,0.1068,0.0985,0.0905,0.0829,0.0756,0.0685,0.0617,0.0551,0.0487,0.0425,0.0364,0.0305,0.0247,0.0192,0.0141,0.0096,0.0059,0.0033,0.0016,0.0007,0.0002,0.0001,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000];
+    const PN=[0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0003,0.0012,0.0026,0.0035,0.0023,-0.0008,-0.0012,-0.0005,-0.0001,-0.0000,-0.0003,-0.0020,-0.0071,-0.0126,0.0042,0.0326,0.0431,0.0400,0.0040,-0.0346,-0.0351,-0.0036,0.0252,0.0280,0.0266,0.0253,0.0239,0.0103,-0.0232,-0.0335,0.0089,0.0700,0.1032,0.0685,-0.0998,-0.2187,-0.2905,-0.3725,-0.4631,-0.5328,-0.4501,-0.0245,0.2857,0.3598,0.3460,0.2797,0.0885,0.0938,0.3106,0.4052,0.4571,0.4839,0.4969,0.5040,0.5074,0.5088,0.5089,0.5080,0.5060,0.5026,0.4974,0.4894,0.4777,0.4623,0.4440,0.4244,0.4045,0.3849,0.3655,0.3462,0.3271,0.3081,0.2893,0.2712,0.2541,0.2381,0.2233,0.2095,0.1964,0.1840,0.1721,0.1607,0.1496,0.1391,0.1290,0.1195,0.1105,0.1019,0.0937,0.0857,0.0780,0.0706,0.0634,0.0564,0.0494,0.0427,0.0359,0.0292,0.0225,0.0163,0.0107,0.0061,0.0020,-0.0022,-0.0059,-0.0079,-0.0082,-0.0087,-0.0096,-0.0089,-0.0083,-0.0091,-0.0083,-0.0086,-0.0093,-0.0073,-0.0077,-0.0090,-0.0074,-0.0046,-0.0022,-0.0008,-0.0002,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000];
+    const PA=[-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0001,-0.0003,-0.0005,-0.0006,-0.0005,-0.0003,-0.0002,-0.0001,-0.0000,-0.0000,-0.0002,-0.0014,-0.0041,-0.0071,-0.0086,-0.0089,-0.0086,-0.0082,-0.0078,-0.0076,-0.0077,-0.0079,-0.0079,-0.0075,-0.0067,-0.0055,-0.0041,-0.0025,-0.0005,0.0020,0.0059,0.0114,0.0167,0.0230,0.0306,0.0399,0.0536,0.0728,0.0938,0.1209,0.1596,0.2106,0.2690,0.3330,0.3965,0.4494,0.4861,0.5048,0.5124,0.5151,0.5138,0.5134,0.5148,0.5148,0.5147,0.5157,0.5162,0.5158,0.5143,0.5109,0.5054,0.4975,0.4860,0.4703,0.4515,0.4315,0.4114,0.3915,0.3716,0.3519,0.3329,0.3143,0.2961,0.2786,0.2618,0.2457,0.2304,0.2158,0.2019,0.1889,0.1768,0.1653,0.1544,0.1440,0.1340,0.1246,0.1155,0.1065,0.0980,0.0900,0.0825,0.0751,0.0680,0.0615,0.0550,0.0484,0.0418,0.0357,0.0300,0.0243,0.0186,0.0136,0.0094,0.0061,0.0038,0.0019,0.0008,0.0007,0.0000,-0.0004,0.0001,-0.0001,0.0001,0.0001,-0.0008,-0.0003,0.0004,0.0003,0.0001,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000];
+    function togglePanel(svgId, legId, series, ymin, ymax, yticks, fmt){
+      const svg=document.getElementById(svgId), lg=document.getElementById(legId);
+      const W=880,H=+svg.viewBox.baseVal.height,M={l:64,r:20,t:12,b:28},Z0=0,Z1=35.09;
+      const NS="http://www.w3.org/2000/svg";
+      const el=(t,a)=>{const n=document.createElementNS(NS,t);for(const k in a)n.setAttribute(k,a[k]);return n;};
+      const sx=z=>M.l+(z-Z0)/(Z1-Z0)*(W-M.l-M.r);
+      const sy=v=>M.t+(ymax-v)/(ymax-ymin)*(H-M.t-M.b);
+      yticks.forEach(v=>{
+        svg.appendChild(el("line",{x1:M.l,x2:W-M.r,y1:sy(v),y2:sy(v),stroke:"var(--hair)"}));
+        const t=el("text",{x:M.l-8,y:sy(v)+4,"text-anchor":"end",fill:"var(--muted)",
+          "font-size":"11","font-family":"ui-monospace,Menlo,monospace"});
+        t.textContent=fmt(v); svg.appendChild(t);
+      });
+      [0,5,10,15,20,25,30,35].forEach(z=>{
+        const t=el("text",{x:sx(z),y:H-M.b+16,"text-anchor":"middle",fill:"var(--muted)",
+          "font-size":"11","font-family":"ui-monospace,Menlo,monospace"});
+        t.textContent=z; svg.appendChild(t);
+      });
+      series.forEach(sr=>{
+        const d=sr.y.map((v,i)=>(i?"L":"M")+sx(Z[i]).toFixed(1)+","+
+          sy(Math.max(ymin,Math.min(ymax,v))).toFixed(1)).join(" ");
+        const a={d,fill:"none",stroke:sr.c,"stroke-width":sr.dash?1.8:2,"stroke-linejoin":"round"};
+        if(sr.dash)a["stroke-dasharray"]=sr.dash;
+        const node=el("path",a); svg.appendChild(node);
+        const b=document.createElement("button");
+        b.type="button"; b.setAttribute("aria-pressed","true");
+        b.style.cssText="display:flex;align-items:center;gap:6px;background:none;"+
+          "border:1px solid var(--hair);border-radius:999px;padding:3px 12px;cursor:pointer;"+
+          "font:12.5px -apple-system,'Segoe UI',Roboto,sans-serif;color:var(--ink2)";
+        b.innerHTML='<i style="background:'+sr.c+'"></i>'+sr.n;
+        let on=true;
+        b.addEventListener("click",()=>{on=!on;
+          b.setAttribute("aria-pressed",String(on));
+          b.style.opacity=on?"1":"0.35"; b.style.borderStyle=on?"solid":"dashed";
+          node.style.display=on?"":"none";});
+        lg.appendChild(b);
+      });
+    }
+    togglePanel("ch-a2","leg-a",[
+      {n:"DFT-extracted (reference field)",c:"var(--ink2)",dash:"5,4",y:AD},
+      {n:"1-D formula (zero field, no solve)",c:"var(--accent)",y:AF}],
+      0,0.45,[0,0.2,0.4],v=>v.toFixed(1));
+    togglePanel("ch-pz","leg-pz",[
+      {n:"DFT reference",c:"var(--ink2)",dash:"5,4",y:PD},
+      {n:"naive 1-D (no P_off)",c:"var(--s3)",y:PN},
+      {n:"affine 1-D (fine anchor)",c:"var(--accent)",y:PA}],
+      -0.62,0.62,[-0.5,0,0.5],v=>v.toFixed(1));
+  })();
+
+  /* ---- P_off three-source comparison ---- */
+  (function(){
+    const POD=[0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0004,-0.0016,-0.0025,-0.0014,0.0001,0.0005,0.0002,0.0000,0.0000,0.0000,0.0001,0.0006,0.0021,0.0021,-0.0074,-0.0175,-0.0167,-0.0061,0.0063,0.0101,0.0026,-0.0039,-0.0045,-0.0055,-0.0045,-0.0025,-0.0024,0.0039,0.0127,0.0041,-0.0176,-0.0352,-0.0371,0.0101,0.1115,0.1984,0.2645,0.3280,0.3242,0.2366,0.1190,0.0280,-0.0095,0.0168,0.0911,0.2074,0.2597,0.1815,0.0959,0.0474,0.0212,0.0085,0.0023,-0.0007,-0.0016,-0.0016,-0.0015,-0.0015,-0.0014,-0.0013,-0.0012,-0.0011,-0.0010,-0.0009,-0.0008,-0.0006,-0.0005,-0.0005,-0.0004,-0.0003,-0.0003,-0.0002,-0.0002,-0.0002,-0.0001,-0.0001,-0.0001,-0.0001,-0.0001,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000];
+    const POC=[0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0004,-0.0016,-0.0025,-0.0014,0.0001,0.0005,0.0002,0.0000,0.0000,0.0000,0.0001,0.0006,0.0021,0.0022,-0.0074,-0.0176,-0.0166,-0.0062,0.0064,0.0101,0.0026,-0.0038,-0.0046,-0.0055,-0.0045,-0.0025,-0.0024,0.0038,0.0128,0.0041,-0.0177,-0.0349,-0.0374,0.0100,0.1119,0.1982,0.2644,0.3274,0.3243,0.2372,0.1172,0.0282,-0.0107,0.0146,0.0892,0.2057,0.2576,0.1805,0.0935,0.0459,0.0198,0.0072,0.0013,-0.0019,-0.0026,-0.0026,-0.0024,-0.0023,-0.0022,-0.0021,-0.0019,-0.0018,-0.0016,-0.0014,-0.0012,-0.0010,-0.0009,-0.0008,-0.0006,-0.0006,-0.0005,-0.0004,-0.0003,-0.0003,-0.0002,-0.0002,-0.0002,-0.0001,-0.0001,-0.0001,-0.0001,-0.0001,-0.0001,-0.0001,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000];
+    const POV=[0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0004,-0.0015,-0.0022,-0.0011,0.0003,0.0006,0.0003,0.0000,0.0000,-0.0000,0.0001,0.0009,0.0032,0.0042,-0.0044,-0.0139,-0.0128,-0.0021,0.0103,0.0139,0.0061,-0.0007,-0.0016,-0.0028,-0.0019,0.0002,0.0005,0.0072,0.0165,0.0086,-0.0116,-0.0267,-0.0260,0.0235,0.1266,0.2155,0.2841,0.3500,0.3482,0.2609,0.1398,0.0479,0.0113,0.0355,0.1039,0.2115,0.2570,0.1735,0.0834,0.0338,0.0093,0.0010,0.0001,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,0.0000,0.0000,-0.0000,-0.0000,0.0000,0.0000,0.0000,-0.0000,0.0000,0.0000,-0.0000,0.0000,0.0000,0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,-0.0000,0.0000,0.0000,-0.0000,0.0000,0.0000,-0.0000,0.0000,0.0000,-0.0000,0.0000,-0.0000,-0.0000,0.0000,0.0000,0.0000,0.0000,0.0000];
+    const svg=document.getElementById("ch-p"), lg=null;
+    const W=880,H=200,M={l:64,r:20,t:12,b:28},Z0=0,Z1=35.09,ymin=-0.07,ymax=0.38;
+    const NS="http://www.w3.org/2000/svg";
+    const el=(t,a)=>{const n=document.createElementNS(NS,t);for(const k in a)n.setAttribute(k,a[k]);return n;};
+    const sx=z=>M.l+(z-Z0)/(Z1-Z0)*(W-M.l-M.r);
+    const sy=v=>M.t+(ymax-v)/(ymax-ymin)*(H-M.t-M.b);
+    [0,0.1,0.2,0.3].forEach(v=>{
+      svg.appendChild(el("line",{x1:M.l,x2:W-M.r,y1:sy(v),y2:sy(v),stroke:"var(--hair)"}));
+      const t=el("text",{x:M.l-8,y:sy(v)+4,"text-anchor":"end",fill:"var(--muted)",
+        "font-size":"11","font-family":"ui-monospace,Menlo,monospace"});
+      t.textContent=v.toFixed(1); svg.appendChild(t);
+    });
+    [0,5,10,15,20,25,30,35].forEach(z=>{
+      const t=el("text",{x:sx(z),y:H-M.b+16,"text-anchor":"middle",fill:"var(--muted)",
+        "font-size":"11","font-family":"ui-monospace,Menlo,monospace"});
+      t.textContent=z; svg.appendChild(t);
+    });
+    [{n:"P_off (DFT reference field)",c:"var(--accent)",y:POD}].forEach(sr=>{
+      const dd=sr.y.map((v,i)=>(i?"L":"M")+sx(Z[i]).toFixed(1)+","+
+        sy(Math.max(ymin,Math.min(ymax,v))).toFixed(1)).join(" ");
+      const a={d:dd,fill:"none",stroke:sr.c,"stroke-width":sr.dash?1.8:2,"stroke-linejoin":"round"};
+      if(sr.dash)a["stroke-dasharray"]=sr.dash;
+      const node=el("path",a); svg.appendChild(node);
+      if(lg){
+        const b=document.createElement("button");
+        b.type="button"; b.setAttribute("aria-pressed","true");
+        b.style.cssText="display:flex;align-items:center;gap:6px;background:none;"+
+          "border:1px solid var(--hair);border-radius:999px;padding:3px 12px;cursor:pointer;"+
+          "font:12.5px -apple-system,'Segoe UI',Roboto,sans-serif;color:var(--ink2)";
+        b.innerHTML='<i style="background:'+sr.c+'"></i>'+sr.n;
+        let on=true;
+        b.addEventListener("click",()=>{on=!on;
+          b.setAttribute("aria-pressed",String(on));
+          b.style.opacity=on?"1":"0.35"; b.style.borderStyle=on?"solid":"dashed";
+          node.style.display=on?"":"none";});
+        lg.appendChild(b);
+      }
+    });
+  })();
+
+
+})();
+</script>
