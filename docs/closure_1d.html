@@ -238,9 +238,11 @@ a{color:var(--accent-ink)} a:focus-visible{outline:2px solid var(--accent);outli
     fail tier (~0.3–1 eV) contains every attempt to avoid a 3-D solve, including the two
     physical priors for the anchor (raw and dielectrically-screened vacuum field: they miss
     the self-consistent interface screening that <em>is</em> P<sub>off</sub>). One 3-D solve
-    for the anchor changes everything. Naive and screened-vacuum values are recomputed
-    under the unified protocol and pairing of the §2–§3 figures (the earlier naive 0.65
-    did not match its own plotted profile; corrected to 0.84).</div>
+    for the anchor changes everything. The fail-tier values are from the unified 5-fixstep
+    protocol; the earlier naive 0.65 and ratio-closure 0.36 did not match their own runs'
+    fixstep records and are corrected to 0.84 and 0.44. The screened-vacuum-A ceiling
+    (5.6×10⁻⁴) is the exact upper bound for the free-trained residual head: a perfect
+    prediction lands there.</div>
   </div>
 
   <div class="tblwrap"><table>
@@ -349,21 +351,22 @@ a{color:var(--accent-ink)} a:focus-visible{outline:2px solid var(--accent);outli
       {n:"raw-vacuum prior (no solve)",v:1.00,tier:0},
       {n:"naive planar reduction (no P_off, legacy)",v:0.84,tier:0},
       {n:"screened vacuum (no solve)",v:0.75,tier:0},
-      {n:"ratio closure, A from 3-D (no P_off, legacy)",v:0.36,tier:0},
+      {n:"ratio closure, A from 3-D (no P_off, legacy)",v:0.44,tier:0},
       {n:"coarse 3-D anchor (0.18 Å) + formula A",v:8.5e-3,tier:1},
+      {n:"fine 3-D anchor + screened-vacuum A",v:5.6e-4,tier:2},
       {n:"fine 3-D anchor + formula A",v:3.39e-4,tier:2},
       {n:"fine 3-D anchor + extracted A",v:2.46e-4,tier:2}
     ];
     const X0=330,X1=840,T=1e-4,B=2;
     const px=v=>X0+(Math.log10(v)-Math.log10(T))/(Math.log10(B)-Math.log10(T))*(X1-X0);
     [1e-4,1e-3,1e-2,1e-1,1].forEach(v=>{
-      g.appendChild(el("line",{x1:px(v),x2:px(v),y1:12,y2:282,stroke:"var(--hair)"}));
-      txt(g,px(v),300,v>=1?"1":v.toExponential(0).replace("e-","e−"),
+      g.appendChild(el("line",{x1:px(v),x2:px(v),y1:12,y2:276,stroke:"var(--hair)"}));
+      txt(g,px(v),292,v>=1?"1":v.toExponential(0).replace("e-","e−"),
         {"text-anchor":"middle",fill:"var(--muted)","font-size":"11","font-family":MONO});
     });
-    txt(g,X1,316,"φ_z RMSE / eV",{"text-anchor":"end",fill:"var(--ink2)","font-size":"12","font-family":SANS});
+    txt(g,X1,308,"φ_z RMSE / eV",{"text-anchor":"end",fill:"var(--ink2)","font-size":"12","font-family":SANS});
     data.forEach((d,i)=>{
-      const y=18+i*37;
+      const y=16+i*34;
       txt(g,320,y+13,d.n,{"text-anchor":"end",fill:"var(--ink2)","font-size":"12.5","font-family":SANS});
       g.appendChild(el("rect",{x:X0,y:y,width:Math.max(2,px(d.v)-X0),height:17,rx:3,
         fill: d.tier===2?"var(--accent)":(d.tier===1?"var(--s2)":"var(--muted)"),
